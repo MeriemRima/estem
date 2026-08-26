@@ -57,8 +57,10 @@ const rootFontStyle = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="fr" className={`${fontVars} h-full`} style={rootFontStyle}>
-      <body className="min-h-full antialiased">{children}</body>
+    <html lang="fr" className={`${fontVars} h-full`} style={rootFontStyle} suppressHydrationWarning>
+      <body className="min-h-full antialiased" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }

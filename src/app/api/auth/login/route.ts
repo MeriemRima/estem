@@ -8,6 +8,27 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+function serverErrorMessage(error: unknown) {
+  const msg = error instanceof Error ? error.message : String(error ?? "");
+  if (msg.includes("AUTH_SECRET")) {
+    return "Config Vercel manquante : AUTH_SECRET";
+  }
+  if (
+    msg.includes("DATABASE_URL") ||
+    msg.includes("Can't reach database") ||
+    msg.includes("P1001") ||
+    msg.includes("P1003") ||
+    msg.includes("P1017") ||
+    msg.includes("PrismaClientInitializationError") ||
+    msg.includes("SQLite") ||
+    msg.includes("no such table") ||
+    msg.includes("does not exist")
+  ) {
+    return "Base de données indisponible — vérifie DATABASE_URL (PostgreSQL) sur Vercel";
+  }
+  return "Erreur serveur";
+}
+
 export async function POST(request: Request) {
   try {
     const body = loginSchema.parse(await request.json());
@@ -42,9 +63,10 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ ok: true, redirectTo: "/dashboard" });
   } catch (error) {
+    console.error("[login]", error);
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Données invalides" }, { status: 400 });
     }
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+    return NextResponse.json({ error: serverErrorMessage(error) }, { status: 500 });
   }
 }

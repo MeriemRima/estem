@@ -5,28 +5,53 @@ SaaS multi-tenant restaurant : menu, tables QR, commandes client, dashboard cuis
 ## Stack
 
 - Next.js (App Router)
-- Prisma + SQLite
+- Prisma + **PostgreSQL** (requis pour Vercel)
 - Auth cookie JWT (jose + bcryptjs)
 
-## Démarrer
+## Variables d'environnement
+
+```bash
+# App (pooler transaction)
+DATABASE_URL="postgresql://postgres.hlvckmvpoelhghppeqbk:[PASSWORD]@aws-1-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+
+# Migrations / seed (pooler session)
+DIRECT_URL="postgresql://postgres.hlvckmvpoelhghppeqbk:[PASSWORD]@aws-1-eu-west-1.pooler.supabase.com:5432/postgres"
+
+AUTH_SECRET="une-longue-chaine-secrete"
+```
+
+Sur **Vercel**, ajoute les **3** variables : `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`.
+
+## Démarrer en local
+
+1. Copie `.env.example` → `.env` et remplace `[YOUR-PASSWORD]` par ton mot de passe Supabase.
+2. Puis :
 
 ```bash
 npm install
-cp .env.example .env   # ou utiliser le .env déjà présent
 npx prisma db push
+npm run db:seed
 npm run dev
 ```
 
-Ouvre [http://localhost:3000](http://localhost:3000).
+Admin seed : `super@estem.ma` / `superadmin123`
 
-## Parcours MVP
+## Déployer sur Vercel
 
-1. **Signup** → crée Owner + Organization
-2. **Dashboard** → catégories & plats
-3. **Tables & QR** → génère un QR par table
-4. **Client** → scan/ouvre `/o/[slug]/t/[token]` et commande
-5. **Cuisine** → `/dashboard/[orgId]/kitchen` reçoit les commandes en live
+1. **Settings → Environment Variables** : `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`
+2. Redeploy
+3. En local (une fois) pour créer tables + admin sur la DB cloud :
 
-## Multi-tenant
+```bash
+npx prisma db push
+npm run db:seed
+```
 
-Toutes les tables métier sont isolées par `organizationId`. RBAC : `OWNER` | `ADMIN` | `MEMBER`.
+(utilise le `.env` pointant déjà vers Supabase)
+
+## Parcours
+
+1. Admin des restaurants crée resto + gérant
+2. Gérant configure menu & tables QR
+3. Client commande via `/o/[slug]/t/[token]`
+4. Cuisine live : `/dashboard/[orgId]/kitchen`
