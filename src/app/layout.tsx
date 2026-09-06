@@ -55,7 +55,7 @@ const rootFontStyle = {
   ["--font-mono" as string]: "var(--font-source), system-ui, sans-serif",
 } as CSSProperties;
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr" className={`${fontVars} h-full`} style={rootFontStyle} suppressHydrationWarning>
       <body className="min-h-full antialiased" suppressHydrationWarning>
