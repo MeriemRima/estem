@@ -11,6 +11,7 @@ const patchSchema = z.object({
   priceCents: z.number().int().positive().optional(),
   categoryId: z.string().min(1).optional(),
   available: z.boolean().optional(),
+  imageUrl: z.string().optional(),
 });
 
 export async function PATCH(request: Request, { params }: Params) {
@@ -38,6 +39,7 @@ export async function PATCH(request: Request, { params }: Params) {
         ...(body.priceCents !== undefined ? { priceCents: body.priceCents } : {}),
         ...(body.categoryId !== undefined ? { categoryId: body.categoryId } : {}),
         ...(body.available !== undefined ? { available: body.available } : {}),
+        ...(body.imageUrl !== undefined ? { imageUrl: body.imageUrl } : {}),
       },
     });
     return NextResponse.json(item);
