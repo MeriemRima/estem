@@ -7,6 +7,8 @@ import { Branding, normalizeBranding } from "@/lib/branding";
 import { RestaurantSettings } from "@/components/restaurant-settings";
 import { RestaurantShell, RestaurantNavId } from "@/components/restaurant-shell";
 import { LogoutButton } from "@/components/logout-button";
+import { EditDishModal } from "@/components/edit-dish-modal";
+import { EditCategoryModal } from "@/components/edit-category-modal";
 import Link from "next/link";
 
 type Item = {
@@ -98,6 +100,8 @@ export function OrgDashboard({
   const [members, setMembers] = useState<
     { id: string; role: string; user: { name: string; email: string } }[]
   >([]);
+  const [editingItem, setEditingItem] = useState<Item | null>(null);
+  const [editingCategory, setEditingCategory] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -159,19 +163,8 @@ export function OrgDashboard({
     }
   }
 
-  async function renameCategory(categoryId: string, current: string) {
-    const name = window.prompt("Nouveau nom de catégorie", current)?.trim();
-    if (!name || name === current) return;
-    const res = await fetch(`/api/orgs/${orgId}/categories/${categoryId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    if (!res.ok) {
-      setError("Modification catégorie impossible");
-      return;
-    }
-    await refresh();
+  function renameCategory(categoryId: string, current: string) {
+    setEditingCategory({ id: categoryId, name: current });
   }
 
   async function deleteCategory(categoryId: string, name: string) {
@@ -257,32 +250,8 @@ export function OrgDashboard({
     }
   }
 
-  async function editItem(item: Item) {
-    const name = window.prompt("Nom du plat", item.name)?.trim();
-    if (!name) return;
-    const priceRaw = window.prompt("Prix en DH", String(item.priceCents / 100));
-    if (priceRaw == null) return;
-    const price = Number(priceRaw);
-    if (!Number.isFinite(price) || price <= 0) {
-      setError("Prix invalide");
-      return;
-    }
-    const description =
-      window.prompt("Description", item.description) ?? item.description;
-    const res = await fetch(`/api/orgs/${orgId}/items/${item.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        description,
-        priceCents: Math.round(price * 100),
-      }),
-    });
-    if (!res.ok) {
-      setError("Modification plat impossible");
-      return;
-    }
-    await refresh();
+  function editItem(item: Item) {
+    setEditingItem(item);
   }
 
   async function deleteItem(item: Item) {
@@ -766,6 +735,28 @@ export function OrgDashboard({
             {tables.length === 0 ? <div className="card muted">Aucune table.</div> : null}
           </div>
         </div>
+      ) : null}
+      {editingItem ? (
+        <EditDishModal
+          orgId={orgId}
+          item={editingItem}
+          categories={categories}
+          onClose={() => setEditingItem(null)}
+          onSuccess={async () => {
+            await refresh();
+          }}
+        />
+      ) : null}
+
+      {editingCategory ? (
+        <EditCategoryModal
+          orgId={orgId}
+          category={editingCategory}
+          onClose={() => setEditingCategory(null)}
+          onSuccess={async () => {
+            await refresh();
+          }}
+        />
       ) : null}
     </RestaurantShell>
   );
