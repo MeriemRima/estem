@@ -8,60 +8,47 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-enum Role {
-  OWNER
-  ADMIN
-  MEMBER
-}
-
-enum OrderStatus {
-  PENDING
-  PREPARING
-  READY
-  COMPLETED
-  CANCELLED
-}
-
-enum OrderSource {
-  QR
-  KIOSK
-}
-
 model User {
-  id                 String       @id @default(cuid())
-  email              String       @unique
-  name               String
-  passwordHash       String
-  isSuperAdmin       Boolean      @default(false)
+  id                   String         @id @default(cuid())
+  email                String         @unique
+  name                 String
+  passwordHash         String
+  isSuperAdmin         Boolean        @default(false)
+  isVendeur            Boolean        @default(false)
   /// Compte créé avec MDP provisoire → forcer le changement à la 1re connexion
-  mustChangePassword Boolean      @default(false)
-  createdAt          DateTime     @default(now())
-  memberships        Membership[]
+  mustChangePassword   Boolean        @default(false)
+  createdAt            DateTime       @default(now())
+  memberships          Membership[]
+  vendeurOrganizations Organization[] @relation("VendeurOrganizations")
 }
 
 model Organization {
-  id              String       @id @default(cuid())
+  id              String        @id @default(cuid())
   name            String
-  slug            String       @unique
+  slug            String        @unique
   /// Nom affiché côté client (sinon = name)
-  brandName       String       @default("")
-  logoUrl         String       @default("")
-  menuCoverUrl    String       @default("")
+  brandName       String        @default("")
+  logoUrl         String        @default("")
+  menuCoverUrl    String        @default("")
   /// standard | book
-  menuFormat      String       @default("standard")
+  menuFormat      String        @default("standard")
   /// classic | elegant | modern | soft | bold
-  textFont        String       @default("classic")
-  primaryColor    String       @default("#c2410c")
-  secondaryColor  String       @default("#1c1917")
-  backgroundColor String       @default("#f3efe6")
+  textFont        String        @default("classic")
+  primaryColor    String        @default("#c2410c")
+  secondaryColor  String        @default("#1c1917")
+  backgroundColor String        @default("#f3efe6")
   /// classic | modern | warm
-  template        String       @default("classic")
-  createdAt       DateTime     @default(now())
-  memberships     Membership[]
+  template        String        @default("classic")
+  vendeurId       String?
+  createdAt       DateTime      @default(now())
+  vendeur         User?         @relation("VendeurOrganizations", fields: [vendeurId], references: [id], onDelete: SetNull)
   categories      Category[]
-  items           MenuItem[]
   tables          DiningTable[]
+  memberships     Membership[]
+  items           MenuItem[]
   orders          Order[]
+
+  @@index([vendeurId])
 }
 
 model Membership {
@@ -69,8 +56,8 @@ model Membership {
   role           Role         @default(MEMBER)
   userId         String
   organizationId String
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, organizationId])
 }
@@ -95,8 +82,8 @@ model MenuItem {
   available      Boolean      @default(true)
   organizationId String
   categoryId     String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   category       Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   orderItems     OrderItem[]
 
   @@index([organizationId])
@@ -125,7 +112,7 @@ model Order {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  table          DiningTable? @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  table          DiningTable? @relation(fields: [tableId], references: [id])
   items          OrderItem[]
 
   @@index([organizationId, status])
@@ -133,12 +120,31 @@ model Order {
 }
 
 model OrderItem {
-  id           String   @id @default(cuid())
-  name         String
+  id             String    @id @default(cuid())
+  name           String
   unitPriceCents Int
-  quantity     Int
-  orderId      String
-  menuItemId   String?
-  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  menuItem     MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+  quantity       Int
+  orderId        String
+  menuItemId     String?
+  menuItem       MenuItem? @relation(fields: [menuItemId], references: [id])
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum OrderStatus {
+  PENDING
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderSource {
+  QR
+  KIOSK
 }

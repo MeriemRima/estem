@@ -46,6 +46,7 @@ type Props = {
   orgName: string;
   slug: string;
   role: string;
+  canCustomize?: boolean;
   initialCategories: Category[];
   initialTables: Table[];
   initialStats: Stats;
@@ -61,6 +62,7 @@ export function OrgDashboard({
   orgName: initialOrgName,
   slug,
   role,
+  canCustomize = false,
   initialCategories,
   initialTables,
   initialStats,
@@ -71,7 +73,7 @@ export function OrgDashboard({
   initialTab = "admin",
 }: Props) {
   const router = useRouter();
-  const canEdit = role === "OWNER" || role === "ADMIN";
+  const canEdit = canCustomize;
   const isOwner = role === "OWNER";
   const [tab, setTab] = useState<RestaurantNavId>(
     initialTab === "kitchen" ? "admin" : initialTab,
@@ -607,7 +609,9 @@ export function OrgDashboard({
               </form>
             </div>
           ) : (
-            <div className="card muted">Lecture seule (rôle MEMBER)</div>
+            <div className="card muted text-sm font-semibold">
+              🔒 La personnalisation du menu et des tarifs est exclusivement réservée au Vendeur.
+            </div>
           )}
 
           <div className="space-y-4">

@@ -19,6 +19,10 @@ export default async function DashboardIndexPage() {
     redirect("/super-admin");
   }
 
+  if (user.isVendeur) {
+    redirect("/vendeur");
+  }
+
   const memberships = await getUserOrganizations(user.id);
 
   if (memberships.length === 1) {
