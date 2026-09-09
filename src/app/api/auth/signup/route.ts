@@ -51,6 +51,7 @@ export async function POST(request: Request) {
       email: user.email,
       name: user.name,
       isSuperAdmin: false,
+      isVendeur: false,
     });
     const org = user.memberships[0]?.organization;
     return NextResponse.json({ ok: true, organizationId: org?.id, slug: org?.slug });
