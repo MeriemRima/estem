@@ -43,6 +43,7 @@ export async function POST(request: Request) {
       email: user.email,
       name: user.name,
       isSuperAdmin: user.isSuperAdmin,
+      isVendeur: user.isVendeur,
     });
 
     if (user.mustChangePassword) {
@@ -51,6 +52,10 @@ export async function POST(request: Request) {
 
     if (user.isSuperAdmin) {
       return NextResponse.json({ ok: true, redirectTo: "/super-admin" });
+    }
+
+    if (user.isVendeur) {
+      return NextResponse.json({ ok: true, redirectTo: "/vendeur" });
     }
 
     const memberships = await getUserOrganizations(user.id);
