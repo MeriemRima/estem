@@ -5,9 +5,16 @@ import { requireOrgAccess } from "@/lib/auth";
 
 type Params = { params: Promise<{ orgId: string }> };
 
-const tableSchema = z.object({
-  name: z.string().min(1),
-});
+const tableSchema = z.union([
+  z.object({
+    name: z.string().min(1),
+  }),
+  z.object({
+    count: z.number().int().min(1).max(100),
+    prefix: z.string().optional().default("Table"),
+    startFrom: z.number().int().min(1).optional().default(1),
+  }),
+]);
 
 export async function GET(_request: Request, { params }: Params) {
   try {
@@ -30,6 +37,34 @@ export async function POST(request: Request, { params }: Params) {
     const { orgId } = await params;
     await requireOrgAccess(orgId, ["OWNER", "ADMIN"]);
     const body = tableSchema.parse(await request.json());
+
+    if ("count" in body) {
+      const prefix = body.prefix?.trim() || "Table";
+      const count = body.count;
+      const startFrom = body.startFrom ?? 1;
+      const padLength = Math.max(2, String(startFrom + count - 1).length);
+
+      const names: string[] = [];
+      for (let i = 0; i < count; i++) {
+        const num = startFrom + i;
+        const formattedNum = String(num).padStart(padLength, "0");
+        names.push(`${prefix} ${formattedNum}`);
+      }
+
+      const createdTables = await prisma.$transaction(
+        names.map((name) =>
+          prisma.diningTable.create({
+            data: {
+              name,
+              organizationId: orgId,
+            },
+          }),
+        ),
+      );
+
+      return NextResponse.json(createdTables);
+    }
+
     const table = await prisma.diningTable.create({
       data: {
         name: body.name,

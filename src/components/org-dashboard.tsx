@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatMoney, qrImageUrl } from "@/lib/utils";
 import { Branding, normalizeBranding } from "@/lib/branding";
@@ -9,6 +9,7 @@ import { RestaurantShell, RestaurantNavId } from "@/components/restaurant-shell"
 import { LogoutButton } from "@/components/logout-button";
 import { EditDishModal } from "@/components/edit-dish-modal";
 import { EditCategoryModal } from "@/components/edit-category-modal";
+import { QrPrintModal } from "@/components/qr-print-modal";
 import Link from "next/link";
 
 type Item = {
@@ -82,7 +83,7 @@ export function OrgDashboard({
   const [orgName, setOrgName] = useState(initialOrgName);
   const [branding, setBranding] = useState(normalizeBranding(initialBranding));
   const [error, setError] = useState("");
-  const [origin, setOrigin] = useState("");
+  const [origin] = useState(() => (typeof window !== "undefined" ? window.location.origin : ""));
   const [saving, setSaving] = useState(false);
 
   const [categoryName, setCategoryName] = useState("");
@@ -92,6 +93,9 @@ export function OrgDashboard({
   const [itemPrice, setItemPrice] = useState("");
   const [itemImageFile, setItemImageFile] = useState<File | null>(null);
   const [tableName, setTableName] = useState("");
+  const [tableMode, setTableMode] = useState<"single" | "bulk">("single");
+  const [bulkCount, setBulkCount] = useState("10");
+  const [bulkPrefix, setBulkPrefix] = useState("Table");
   const [editOrgName, setEditOrgName] = useState(initialOrgName);
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
@@ -102,10 +106,19 @@ export function OrgDashboard({
   >([]);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [editingCategory, setEditingCategory] = useState<{ id: string; name: string } | null>(null);
+  const [showPrintModal, setShowPrintModal] = useState(false);
 
-  useEffect(() => {
-    setOrigin(window.location.origin);
-  }, []);
+  const nextTableNumber = useMemo(() => {
+    let highest = 0;
+    for (const t of tables) {
+      const match = t.name.match(/(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > highest) highest = num;
+      }
+    }
+    return highest > 0 ? highest + 1 : tables.length + 1;
+  }, [tables]);
 
   useEffect(() => {
     if (!canEdit) return;
@@ -284,6 +297,34 @@ export function OrgDashboard({
       setTables((prev) => [...prev, created]);
       setTableName("");
       setStats((s) => ({ ...s, tables: s.tables + 1 }));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addBulkTables(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const count = parseInt(bulkCount, 10);
+    if (isNaN(count) || count < 1 || count > 100 || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/orgs/${orgId}/tables`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          count,
+          prefix: bulkPrefix.trim() || "Table",
+          startFrom: nextTableNumber,
+        }),
+      });
+      if (!res.ok) {
+        setError("Impossible de générer les tables en masse");
+        return;
+      }
+      const created: Table[] = await res.json();
+      setTables((prev) => [...prev, ...created]);
+      setStats((s) => ({ ...s, tables: s.tables + created.length }));
     } finally {
       setSaving(false);
     }
@@ -679,21 +720,137 @@ export function OrgDashboard({
       ) : null}
 
       {tab === "tables" ? (
-        <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+        <div className="space-y-6">
+          <div className="card flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold">Gestion des tables &amp; QR</h2>
+              <p className="muted text-sm" style={{ fontFamily: "var(--font-mono)" }}>
+                {tables.length} table{tables.length > 1 ? "s" : ""} · Prêt pour impression et affichage sur table
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPrintModal(true)}
+              disabled={tables.length === 0}
+              className="btn flex items-center gap-2 shadow-sm"
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
+                />
+              </svg>
+              Imprimer les QR codes
+            </button>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
           {canEdit ? (
-            <form onSubmit={addTable} className="card h-fit space-y-3">
-              <h2 className="text-xl font-semibold">Nouvelle table</h2>
-              <input
-                className="input"
-                placeholder="Ex. Table 12"
-                value={tableName}
-                onChange={(e) => setTableName(e.target.value)}
-                required
-              />
-              <button className="btn" disabled={saving || !tableName.trim()}>
-                {saving ? "..." : "Générer QR"}
-              </button>
-            </form>
+            <div className="card h-fit space-y-4">
+              <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: "var(--line)" }}>
+                <h2 className="text-lg font-semibold">Ajouter des tables</h2>
+                <div className="flex rounded-full bg-[rgba(0,0,0,0.06)] p-0.5 text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setTableMode("single")}
+                    className={`rounded-full px-3 py-1 transition ${
+                      tableMode === "single"
+                        ? "bg-white text-stone-900 shadow-sm font-semibold"
+                        : "text-stone-600 hover:text-stone-900"
+                    }`}
+                  >
+                    Une table
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTableMode("bulk")}
+                    className={`rounded-full px-3 py-1 transition ${
+                      tableMode === "bulk"
+                        ? "bg-white text-stone-900 shadow-sm font-semibold"
+                        : "text-stone-600 hover:text-stone-900"
+                    }`}
+                  >
+                    ⚡ En masse
+                  </button>
+                </div>
+              </div>
+
+              {tableMode === "single" ? (
+                <form onSubmit={addTable} className="space-y-3">
+                  <div>
+                    <label className="label">Nom de la table</label>
+                    <input
+                      className="input"
+                      placeholder="Ex. Table 12 ou VIP"
+                      value={tableName}
+                      onChange={(e) => setTableName(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <button className="btn w-full" disabled={saving || !tableName.trim()}>
+                    {saving ? "..." : "Générer QR"}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={addBulkTables} className="space-y-3">
+                  <div>
+                    <label className="label">Combien de tables avez-vous ?</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      className="input"
+                      placeholder="Ex. 10"
+                      value={bulkCount}
+                      onChange={(e) => setBulkCount(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Préfixe du nom</label>
+                    <input
+                      className="input"
+                      placeholder="Table"
+                      value={bulkPrefix}
+                      onChange={(e) => setBulkPrefix(e.target.value)}
+                    />
+                  </div>
+
+                  {parseInt(bulkCount, 10) > 0 ? (
+                    <div className="rounded-xl bg-[rgba(194,65,12,0.08)] p-3 text-xs leading-relaxed text-stone-700">
+                      <span className="font-semibold text-orange-800">Aperçu : </span>
+                      Générera {bulkCount} table{parseInt(bulkCount, 10) > 1 ? "s" : ""} de{" "}
+                      <strong className="text-stone-900">
+                        {bulkPrefix.trim() || "Table"}{" "}
+                        {String(nextTableNumber).padStart(2, "0")}
+                      </strong>{" "}
+                      à{" "}
+                      <strong className="text-stone-900">
+                        {bulkPrefix.trim() || "Table"}{" "}
+                        {String(nextTableNumber + parseInt(bulkCount, 10) - 1).padStart(
+                          Math.max(2, String(nextTableNumber + parseInt(bulkCount, 10) - 1).length),
+                          "0",
+                        )}
+                      </strong>
+                    </div>
+                  ) : null}
+
+                  <button
+                    className="btn w-full flex items-center justify-center gap-2"
+                    disabled={saving || !bulkCount || parseInt(bulkCount, 10) < 1}
+                  >
+                    {saving ? "Génération en cours..." : `⚡ Générer ${bulkCount || ""} tables & QR`}
+                  </button>
+                </form>
+              )}
+            </div>
           ) : (
             <div className="card muted">Lecture seule</div>
           )}
@@ -735,6 +892,7 @@ export function OrgDashboard({
             {tables.length === 0 ? <div className="card muted">Aucune table.</div> : null}
           </div>
         </div>
+        </div>
       ) : null}
       {editingItem ? (
         <EditDishModal
@@ -756,6 +914,16 @@ export function OrgDashboard({
           onSuccess={async () => {
             await refresh();
           }}
+        />
+      ) : null}
+
+      {showPrintModal ? (
+        <QrPrintModal
+          tables={tables}
+          branding={branding}
+          slug={slug}
+          origin={origin}
+          onClose={() => setShowPrintModal(false)}
         />
       ) : null}
     </RestaurantShell>
