@@ -53,7 +53,18 @@ export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props)
   const deselectAll = () => setSelectedTableIds([]);
 
   const handlePrint = () => {
+    const originalTitle = document.title;
+    document.title = "QR Codes Tables à imprimer";
+
+    const restoreTitle = () => {
+      document.title = originalTitle;
+      window.removeEventListener("afterprint", restoreTitle);
+    };
+
+    window.addEventListener("afterprint", restoreTitle);
     window.print();
+
+    setTimeout(restoreTitle, 2000);
   };
 
   return (
