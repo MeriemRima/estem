@@ -17,15 +17,74 @@ export async function POST(request: Request) {
     await requireSuperAdmin();
     const body = schema.parse(await request.json());
     const email = body.ownerEmail.toLowerCase();
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      return NextResponse.json({ error: "Email gérant déjà utilisé" }, { status: 400 });
-    }
+    const existing = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        memberships: {
+          include: {
+            organization: { select: { name: true } },
+          },
+        },
+      },
+    });
+
     let slug = slugify(body.restaurantName) || "restaurant";
     if (await prisma.organization.findUnique({ where: { slug } })) {
       slug = `${slug}-${Date.now().toString(36)}`;
     }
     const passwordHash = await hashPassword(body.ownerPassword);
+
+    if (existing) {
+      if (existing.memberships.length > 0) {
+        return NextResponse.json(
+          {
+            error: `Cet email est déjà assigné au restaurant « ${existing.memberships[0].organization.name} »`,
+          },
+          { status: 400 }
+        );
+      }
+
+      // User exists but has NO active restaurant (e.g. previous restaurant deleted) -> reuse account!
+      const org = await prisma.organization.create({
+        data: {
+          name: body.restaurantName,
+          slug,
+          memberships: {
+            create: {
+              role: "OWNER",
+              userId: existing.id,
+            },
+          },
+        },
+        include: {
+          memberships: {
+            where: { role: "OWNER" },
+            include: {
+              user: { select: { id: true, name: true, email: true, mustChangePassword: true } },
+            },
+          },
+        },
+      });
+
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          name: body.ownerName,
+          passwordHash,
+          mustChangePassword: true,
+        },
+      });
+
+      const owner = org.memberships[0]?.user ?? null;
+      return NextResponse.json({
+        id: org.id,
+        name: org.name,
+        slug: org.slug,
+        owner,
+        provisionalPassword: body.ownerPassword,
+      });
+    }
+
     const org = await prisma.organization.create({
       data: {
         name: body.restaurantName,

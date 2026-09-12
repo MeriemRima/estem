@@ -16,7 +16,7 @@ export default async function SuperAdminPage() {
   });
   if (dbUser?.mustChangePassword) redirect("/account/password");
 
-  const [organizations, userCount, activeOrders] = await Promise.all([
+  const [organizations, userCount, activeOrders, allUsers] = await Promise.all([
     prisma.organization.findMany({
       orderBy: { createdAt: "desc" },
       include: {
@@ -42,6 +42,29 @@ export default async function SuperAdminPage() {
     prisma.user.count(),
     prisma.order.count({
       where: { status: { in: ["PENDING", "PREPARING", "READY"] } },
+    }),
+    prisma.user.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isSuperAdmin: true,
+        mustChangePassword: true,
+        createdAt: true,
+        memberships: {
+          select: {
+            role: true,
+            organization: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+              },
+            },
+          },
+        },
+      },
     }),
   ]);
 
@@ -74,6 +97,16 @@ export default async function SuperAdminPage() {
           counts: o._count,
           owner: o.memberships[0]?.user ?? null,
         }))}
+        initialUsers={allUsers.map((u) => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          isSuperAdmin: u.isSuperAdmin,
+          mustChangePassword: u.mustChangePassword,
+          createdAt: u.createdAt.toISOString(),
+          memberships: u.memberships,
+        }))}
+        currentUserId={session.id}
         initialStats={{
           restaurants: organizations.length,
           users: userCount,
