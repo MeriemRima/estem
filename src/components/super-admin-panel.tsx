@@ -25,6 +25,25 @@ type OrgRow = {
   owner: Owner;
 };
 
+type UserMembership = {
+  role: string;
+  organization: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+};
+
+type UserRow = {
+  id: string;
+  name: string;
+  email: string;
+  isSuperAdmin: boolean;
+  mustChangePassword: boolean;
+  createdAt: string;
+  memberships: UserMembership[];
+};
+
 type Stats = {
   restaurants: number;
   users: number;
@@ -40,31 +59,56 @@ function suggestPassword() {
 
 export function SuperAdminPanel({
   initialOrgs,
+  initialUsers = [],
+  currentUserId,
   initialStats,
 }: {
   initialOrgs: OrgRow[];
+  initialUsers?: UserRow[];
+  currentUserId?: string;
   initialStats: Stats;
 }) {
   const router = useRouter();
-  const [orgs, setOrgs] = useState(initialOrgs);
-  const [stats, setStats] = useState(initialStats);
+  const [orgs, setOrgs] = useState<OrgRow[]>(initialOrgs);
+  const [users, setUsers] = useState<UserRow[]>(initialUsers);
+  const [stats, setStats] = useState<Stats>(initialStats);
+  const [activeTab, setActiveTab] = useState<"restaurants" | "users">("restaurants");
+
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
+  const [userQuery, setUserQuery] = useState("");
   const [provisionalPassword, setProvisionalPassword] = useState(suggestPassword);
+
   const [createdCred, setCreatedCred] = useState<{
     restaurant: string;
     email: string;
     password: string;
     orgId: string;
   } | null>(null);
-  const [resetCred, setResetCred] = useState<{
-    restaurant: string;
+
+  // Modal states
+  const [resetModal, setResetModal] = useState<{
+    targetType: "org" | "user";
+    id: string;
+    title: string;
+    email: string;
+  } | null>(null);
+  const [customPassword, setCustomPassword] = useState("");
+  const [resetSuccessCred, setResetSuccessCred] = useState<{
+    title: string;
     email: string;
     password: string;
   } | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  const filtered = useMemo(() => {
+  const [deleteOrgModal, setDeleteOrgModal] = useState<OrgRow | null>(null);
+  const [deleteUserModal, setDeleteUserModal] = useState<UserRow | null>(null);
+
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState("");
+
+  const filteredOrgs = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return orgs;
     return orgs.filter(
@@ -75,6 +119,17 @@ export function SuperAdminPanel({
         o.owner?.name?.toLowerCase().includes(q),
     );
   }, [orgs, query]);
+
+  const filteredUsers = useMemo(() => {
+    const q = userQuery.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter(
+      (u) =>
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        u.memberships.some((m) => m.organization.name.toLowerCase().includes(q)),
+    );
+  }, [users, userQuery]);
 
   async function refresh() {
     const res = await fetch("/api/super-admin");
@@ -100,6 +155,9 @@ export function SuperAdminPanel({
         }),
       ),
     );
+    if (data.users) {
+      setUsers(data.users);
+    }
   }
 
   async function createRestaurant(e: FormEvent<HTMLFormElement>) {
@@ -123,7 +181,7 @@ export function SuperAdminPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Erreur");
+        setError(data.error || "Erreur lors de la création");
         return;
       }
       setCreatedCred({
@@ -141,48 +199,115 @@ export function SuperAdminPanel({
     }
   }
 
-  async function removeOrg(id: string, name: string) {
-    if (!window.confirm(`Supprimer « ${name} » de la plateforme ?`)) return;
-    const res = await fetch(`/api/super-admin/restaurants/${id}`, { method: "DELETE" });
-    if (!res.ok) {
-      setError("Suppression impossible");
-      return;
-    }
-    await refresh();
+  function openResetModal(
+    targetType: "org" | "user",
+    id: string,
+    title: string,
+    email: string,
+  ) {
+    setResetModal({ targetType, id, title, email });
+    setCustomPassword(suggestPassword());
+    setResetSuccessCred(null);
+    setCopied(false);
+    setModalError("");
   }
 
-  async function resetOwnerPassword(org: OrgRow) {
-    if (!org.owner) {
-      setError("Aucun gérant à réinitialiser");
-      return;
+  async function handleResetPassword(e: FormEvent) {
+    e.preventDefault();
+    if (!resetModal) return;
+    setModalLoading(true);
+    setModalError("");
+    try {
+      const url =
+        resetModal.targetType === "org"
+          ? `/api/super-admin/restaurants/${resetModal.id}/reset-password`
+          : `/api/super-admin/users/${resetModal.id}/reset-password`;
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: customPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setModalError(data.error || "Réinitialisation impossible");
+        return;
+      }
+      setResetSuccessCred({
+        title: resetModal.title,
+        email: data.email,
+        password: data.provisionalPassword,
+      });
+      await refresh();
+    } catch {
+      setModalError("Une erreur réseau est survenue");
+    } finally {
+      setModalLoading(false);
     }
-    if (!window.confirm(`Nouveau mot de passe provisoire pour ${org.owner.email} ?`)) return;
-    setError("");
-    const res = await fetch(`/api/super-admin/restaurants/${org.id}/reset-password`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || "Réinitialisation impossible");
-      return;
+  }
+
+  async function copyToClipboard(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback
     }
-    setResetCred({
-      restaurant: org.name,
-      email: data.email,
-      password: data.provisionalPassword,
-    });
-    await refresh();
+  }
+
+  async function handleDeleteOrg() {
+    if (!deleteOrgModal) return;
+    setModalLoading(true);
+    setModalError("");
+    try {
+      const res = await fetch(`/api/super-admin/restaurants/${deleteOrgModal.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setModalError(data.error || "Suppression impossible");
+        return;
+      }
+      setDeleteOrgModal(null);
+      await refresh();
+    } catch {
+      setModalError("Une erreur réseau est survenue");
+    } finally {
+      setModalLoading(false);
+    }
+  }
+
+  async function handleDeleteUser() {
+    if (!deleteUserModal) return;
+    setModalLoading(true);
+    setModalError("");
+    try {
+      const res = await fetch(`/api/super-admin/users/${deleteUserModal.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setModalError(data.error || "Suppression impossible");
+        return;
+      }
+      setDeleteUserModal(null);
+      await refresh();
+    } catch {
+      setModalError("Une erreur réseau est survenue");
+    } finally {
+      setModalLoading(false);
+    }
   }
 
   return (
     <div className="space-y-8">
+      {/* Platform Stats Cards */}
       <section className="grid gap-3 sm:grid-cols-3">
         {[
           ["Restaurants", stats.restaurants, "Créés sur la plateforme"],
-          ["Comptes", stats.users, "Gérants & équipes"],
-          ["Commandes live", stats.activeOrders, "En cours partout"],
+          ["Comptes", stats.users, "Gérants & administrateurs"],
+          ["Commandes live", stats.activeOrders, "En cours sur la plateforme"],
         ].map(([label, value, hint]) => (
           <div
             key={label as string}
@@ -190,7 +315,9 @@ export function SuperAdminPanel({
           >
             <div
               className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full opacity-30"
-              style={{ background: "radial-gradient(circle, rgba(194,65,12,0.35), transparent 70%)" }}
+              style={{
+                background: "radial-gradient(circle, rgba(194,65,12,0.35), transparent 70%)",
+              }}
             />
             <div className="muted text-xs uppercase tracking-[0.16em]">{label}</div>
             <div className="mt-2 text-3xl font-semibold tabular-nums">{value}</div>
@@ -201,181 +328,568 @@ export function SuperAdminPanel({
         ))}
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-        <form
-          onSubmit={createRestaurant}
-          className="space-y-4 rounded-[1.5rem] border border-[var(--line)] bg-[var(--card)] p-5 shadow-[0_12px_40px_rgba(28,25,23,0.06)]"
+      {/* Tabs Switcher: Restaurants vs Utilisateurs */}
+      <div className="flex border-b border-[var(--line)] gap-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab("restaurants")}
+          className={`pb-3 px-4 font-semibold text-sm transition border-b-2 flex items-center gap-2 ${
+            activeTab === "restaurants"
+              ? "border-[var(--brand)] text-[var(--brand)]"
+              : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]"
+          }`}
         >
-          <div>
-            <p className="muted text-xs uppercase tracking-[0.16em]">Accès gérant</p>
-            <h2 className="mt-1 text-2xl font-semibold">Créer un restaurant</h2>
-            <p className="muted mt-1 text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-              Le gérant n&apos;accède qu&apos;à son espace, avec un mot de passe provisoire à
-              changer à la 1<sup>re</sup> connexion.
-            </p>
-          </div>
+          <span>Restaurants</span>
+          <span className="rounded-full bg-[var(--line)] px-2 py-0.5 text-xs font-mono text-[var(--ink)]">
+            {orgs.length}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("users")}
+          className={`pb-3 px-4 font-semibold text-sm transition border-b-2 flex items-center gap-2 ${
+            activeTab === "users"
+              ? "border-[var(--brand)] text-[var(--brand)]"
+              : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]"
+          }`}
+        >
+          <span>Utilisateurs</span>
+          <span className="rounded-full bg-[var(--line)] px-2 py-0.5 text-xs font-mono text-[var(--ink)]">
+            {users.length}
+          </span>
+        </button>
+      </div>
 
-          <input className="input" name="restaurantName" placeholder="Nom du restaurant" required />
-          <input className="input" name="ownerName" placeholder="Nom du gérant" required />
-          <input
-            className="input"
-            name="ownerEmail"
-            type="email"
-            placeholder="Email du gérant"
-            required
-          />
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <label className="label mb-0" htmlFor="ownerPassword">
-                Mot de passe provisoire
-              </label>
-              <button
-                type="button"
-                className="text-xs font-semibold underline opacity-70"
-                onClick={() => setProvisionalPassword(suggestPassword())}
-              >
-                Générer
-              </button>
+      {/* TAB 1: RESTAURANTS */}
+      {activeTab === "restaurants" ? (
+        <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+          <form
+            onSubmit={createRestaurant}
+            className="space-y-4 rounded-[1.5rem] border border-[var(--line)] bg-[var(--card)] p-5 shadow-[0_12px_40px_rgba(28,25,23,0.06)]"
+          >
+            <div>
+              <p className="muted text-xs uppercase tracking-[0.16em]">Accès gérant</p>
+              <h2 className="mt-1 text-2xl font-semibold">Créer un restaurant</h2>
+              <p className="muted mt-1 text-sm" style={{ fontFamily: "var(--font-mono)" }}>
+                Le gérant n&apos;accède qu&apos;à son espace, avec un mot de passe provisoire à
+                changer à la 1<sup>re</sup> connexion.
+              </p>
             </div>
+
+            <input className="input" name="restaurantName" placeholder="Nom du restaurant" required />
+            <input className="input" name="ownerName" placeholder="Nom du gérant" required />
             <input
               className="input"
-              id="ownerPassword"
-              name="ownerPassword"
-              type="text"
-              value={provisionalPassword}
-              onChange={(e) => setProvisionalPassword(e.target.value)}
-              minLength={6}
+              name="ownerEmail"
+              type="email"
+              placeholder="Email du gérant"
               required
-              autoComplete="off"
-              style={{ fontFamily: "var(--font-mono)" }}
             />
-          </div>
-
-          {error ? <p className="text-sm text-red-700">{error}</p> : null}
-
-          {createdCred ? (
-            <div
-              className="rounded-2xl border px-4 py-3 text-sm"
-              style={{
-                borderColor: "color-mix(in srgb, var(--ok) 40%, var(--line))",
-                background: "color-mix(in srgb, var(--ok) 8%, white)",
-              }}
-            >
-              <div className="font-semibold">Compte gérant créé</div>
-              <p className="mt-1 opacity-80" style={{ fontFamily: "var(--font-mono)" }}>
-                {createdCred.restaurant}
-                <br />
-                {createdCred.email}
-                <br />
-                MDP : {createdCred.password}
-              </p>
-              <Link href={`/dashboard/${createdCred.orgId}`} className="btn mt-3">
-                Ouvrir le restaurant
-              </Link>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="label mb-0" htmlFor="ownerPassword">
+                  Mot de passe provisoire
+                </label>
+                <button
+                  type="button"
+                  className="text-xs font-semibold underline opacity-70 hover:opacity-100"
+                  onClick={() => setProvisionalPassword(suggestPassword())}
+                >
+                  Générer
+                </button>
+              </div>
+              <input
+                className="input"
+                id="ownerPassword"
+                name="ownerPassword"
+                type="text"
+                value={provisionalPassword}
+                onChange={(e) => setProvisionalPassword(e.target.value)}
+                minLength={6}
+                required
+                autoComplete="off"
+                style={{ fontFamily: "var(--font-mono)" }}
+              />
             </div>
-          ) : null}
 
-          <button className="btn w-full" disabled={loading}>
-            {loading ? "Création..." : "Créer resto + compte gérant"}
-          </button>
-        </form>
+            {error ? <p className="text-sm text-red-700">{error}</p> : null}
 
+            {createdCred ? (
+              <div
+                className="rounded-2xl border px-4 py-3 text-sm space-y-2"
+                style={{
+                  borderColor: "color-mix(in srgb, var(--ok) 40%, var(--line))",
+                  background: "color-mix(in srgb, var(--ok) 8%, white)",
+                }}
+              >
+                <div className="font-semibold text-emerald-800">Compte gérant créé !</div>
+                <div className="text-xs opacity-90 space-y-1" style={{ fontFamily: "var(--font-mono)" }}>
+                  <div><strong>Restaurant :</strong> {createdCred.restaurant}</div>
+                  <div><strong>Email :</strong> {createdCred.email}</div>
+                  <div><strong>MDP :</strong> {createdCred.password}</div>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      copyToClipboard(
+                        `Restaurant: ${createdCred.restaurant}\nEmail: ${createdCred.email}\nMot de passe: ${createdCred.password}`
+                      )
+                    }
+                    className="btn btn-ghost text-xs py-1.5 px-3"
+                  >
+                    {copied ? "✓ Identifiants copiés !" : "Copier les identifiants"}
+                  </button>
+                  <Link href={`/dashboard/${createdCred.orgId}`} className="btn text-xs py-1.5 px-3">
+                    Ouvrir le restaurant
+                  </Link>
+                </div>
+              </div>
+            ) : null}
+
+            <button className="btn w-full" disabled={loading}>
+              {loading ? "Création en cours..." : "Créer resto + compte gérant"}
+            </button>
+          </form>
+
+          <section className="space-y-4">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="muted text-xs uppercase tracking-[0.16em]">Ownership</p>
+                <h2 className="text-2xl font-semibold">Tous les restaurants</h2>
+              </div>
+              <input
+                className="input max-w-xs"
+                placeholder="Rechercher resto ou gérant…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+
+            {filteredOrgs.length === 0 ? (
+              <div className="rounded-[1.35rem] border border-dashed border-[var(--line)] bg-[var(--card)] p-8 text-center">
+                <p className="muted">Aucun restaurant trouvé.</p>
+              </div>
+            ) : null}
+
+            <div className="space-y-3">
+              {filteredOrgs.map((org) => (
+                <article
+                  key={org.id}
+                  className="rounded-[1.35rem] border border-[var(--line)] bg-[var(--card)] p-4 transition hover:border-[var(--brand)]"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-semibold">{org.name}</h3>
+                      <p className="muted text-sm" style={{ fontFamily: "var(--font-mono)" }}>
+                        /{org.slug} · {org.counts.items} plats · {org.counts.tables} tables ·{" "}
+                        {org.counts.orders} cmd
+                      </p>
+                      <div className="mt-3 rounded-xl bg-[rgba(194,65,12,0.06)] px-3 py-2 text-sm">
+                        <div className="text-xs uppercase tracking-[0.14em] opacity-55">Gérant</div>
+                        {org.owner ? (
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                            <span className="font-semibold">{org.owner.name}</span>
+                            <span className="muted"> · {org.owner.email}</span>
+                            {org.owner.mustChangePassword ? (
+                              <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800">
+                                MDP provisoire
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <div className="muted mt-0.5 text-xs italic">Aucun gérant assigné</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Link href={`/dashboard/${org.id}`} className="btn btn-ghost text-xs py-2 px-3">
+                        Voir le restaurant
+                      </Link>
+                      <button
+                        type="button"
+                        className="btn btn-ghost text-xs py-2 px-3 text-red-600 hover:text-red-700 hover:border-red-300"
+                        onClick={() => {
+                          setModalError("");
+                          setDeleteOrgModal(org);
+                        }}
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {/* TAB 2: UTILISATEURS */}
+      {activeTab === "users" ? (
         <section className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="muted text-xs uppercase tracking-[0.16em]">Ownership</p>
-              <h2 className="text-2xl font-semibold">Tous les restaurants</h2>
+              <p className="muted text-xs uppercase tracking-[0.16em]">Comptes & Accès</p>
+              <h2 className="text-2xl font-semibold">Gestion des utilisateurs</h2>
+              <p className="muted text-xs mt-1" style={{ fontFamily: "var(--font-mono)" }}>
+                Gérez les comptes indépendamment des restaurants. La suppression d&apos;un compte libère son adresse email.
+              </p>
             </div>
             <input
               className="input max-w-xs"
-              placeholder="Rechercher resto ou gérant…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Rechercher nom, email, restaurant…"
+              value={userQuery}
+              onChange={(e) => setUserQuery(e.target.value)}
             />
           </div>
 
-          {filtered.length === 0 ? (
+          {filteredUsers.length === 0 ? (
             <div className="rounded-[1.35rem] border border-dashed border-[var(--line)] bg-[var(--card)] p-8 text-center">
-              <p className="muted">Aucun restaurant trouvé.</p>
-            </div>
-          ) : null}
-
-          {resetCred ? (
-            <div
-              className="rounded-2xl border px-4 py-3 text-sm"
-              style={{
-                borderColor: "color-mix(in srgb, var(--ok) 40%, var(--line))",
-                background: "color-mix(in srgb, var(--ok) 8%, white)",
-              }}
-            >
-              <div className="font-semibold">Nouveau MDP provisoire</div>
-              <p className="mt-1 opacity-80" style={{ fontFamily: "var(--font-mono)" }}>
-                {resetCred.restaurant}
-                <br />
-                {resetCred.email}
-                <br />
-                MDP : {resetCred.password}
-              </p>
+              <p className="muted">Aucun utilisateur trouvé.</p>
             </div>
           ) : null}
 
           <div className="space-y-3">
-            {filtered.map((org) => (
-              <article
-                key={org.id}
-                className="rounded-[1.35rem] border border-[var(--line)] bg-[var(--card)] p-4 transition hover:border-[var(--brand)]"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="text-lg font-semibold">{org.name}</h3>
-                    <p className="muted text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-                      /{org.slug} · {org.counts.items} plats · {org.counts.tables} tables ·{" "}
-                      {org.counts.orders} cmd
-                    </p>
-                    <div className="mt-3 rounded-xl bg-[rgba(194,65,12,0.06)] px-3 py-2 text-sm">
-                      <div className="text-xs uppercase tracking-[0.14em] opacity-55">Gérant</div>
-                      {org.owner ? (
-                        <div className="mt-0.5">
-                          <span className="font-semibold">{org.owner.name}</span>
-                          <span className="muted"> · {org.owner.email}</span>
-                          {org.owner.mustChangePassword ? (
-                            <span className="ml-2 text-xs font-semibold text-amber-800">
+            {filteredUsers.map((u) => {
+              const isCurrent = u.id === currentUserId;
+              const hasMemberships = u.memberships && u.memberships.length > 0;
+
+              return (
+                <article
+                  key={u.id}
+                  className="rounded-[1.35rem] border border-[var(--line)] bg-[var(--card)] p-4 transition hover:border-[var(--brand)]"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[rgba(194,65,12,0.12)] font-semibold text-[var(--brand)] text-base">
+                        {u.name ? u.name.charAt(0).toUpperCase() : "U"}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-semibold text-base">{u.name}</h3>
+                          {isCurrent ? (
+                            <span className="rounded-md bg-stone-200 px-2 py-0.5 text-xs font-semibold text-stone-700">
+                              Votre compte
+                            </span>
+                          ) : null}
+                          {u.isSuperAdmin ? (
+                            <span className="rounded-md bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-800">
+                              Super Admin
+                            </span>
+                          ) : null}
+                          {u.mustChangePassword ? (
+                            <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
                               MDP provisoire
                             </span>
                           ) : null}
                         </div>
-                      ) : (
-                        <div className="muted mt-0.5">Aucun gérant assigné</div>
-                      )}
+                        <p className="muted text-xs mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>
+                          {u.email} · Inscrit le {new Date(u.createdAt).toLocaleDateString("fr-FR")}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {hasMemberships ? (
+                            u.memberships.map((m) => (
+                              <span
+                                key={m.organization.id}
+                                className="rounded-md bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-800"
+                              >
+                                Gérant : {m.organization.name}
+                              </span>
+                            ))
+                          ) : !u.isSuperAdmin ? (
+                            <span className="rounded-md bg-stone-100 px-2 py-0.5 text-xs text-stone-600 italic">
+                              Sans restaurant assigné
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Link href={`/dashboard/${org.id}`} className="btn btn-ghost">
-                      Voir le restaurant
-                    </Link>
-                    {org.owner ? (
+
+                    <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        className="btn btn-ghost"
-                        onClick={() => resetOwnerPassword(org)}
+                        className="btn btn-ghost text-xs py-2 px-3"
+                        onClick={() => openResetModal("user", u.id, u.name, u.email)}
                       >
                         Reset MDP
                       </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      onClick={() => removeOrg(org.id, org.name)}
-                    >
-                      Supprimer
-                    </button>
+                      <button
+                        type="button"
+                        disabled={isCurrent || u.isSuperAdmin}
+                        title={
+                          isCurrent
+                            ? "Vous ne pouvez pas supprimer votre propre compte"
+                            : u.isSuperAdmin
+                            ? "Compte Super Admin protégé"
+                            : "Supprimer cet utilisateur"
+                        }
+                        className="btn btn-ghost text-xs py-2 px-3 text-red-600 hover:text-red-700 hover:border-red-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                        onClick={() => {
+                          setModalError("");
+                          setDeleteUserModal(u);
+                        }}
+                      >
+                        Supprimer
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         </section>
-      </div>
+      ) : null}
+
+      {/* MODAL 1: RESET PASSWORD */}
+      {resetModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="card relative max-h-[90vh] w-full max-w-md space-y-4 shadow-2xl border border-[var(--line)] bg-[var(--card)] p-6 rounded-2xl overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[var(--line)] pb-3">
+              <div>
+                <h3 className="text-lg font-bold">Réinitialiser le mot de passe</h3>
+                <p className="muted text-xs mt-0.5">
+                  {resetModal.title} · {resetModal.email}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetModal(null)}
+                className="flex h-7 w-7 items-center justify-center rounded-full text-base hover:bg-black/10 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {modalError ? (
+              <div className="rounded-lg bg-red-100 p-2.5 text-xs text-red-800">
+                {modalError}
+              </div>
+            ) : null}
+
+            {resetSuccessCred ? (
+              <div className="space-y-4 py-2">
+                <div
+                  className="rounded-2xl border p-4 text-sm space-y-2"
+                  style={{
+                    borderColor: "color-mix(in srgb, var(--ok) 40%, var(--line))",
+                    background: "color-mix(in srgb, var(--ok) 8%, white)",
+                  }}
+                >
+                  <div className="font-semibold text-emerald-800 flex items-center gap-2">
+                    <span>✓</span> Mot de passe réinitialisé avec succès !
+                  </div>
+                  <p className="text-xs text-stone-600">
+                    Le compte sera invité à changer ce mot de passe à sa prochaine connexion.
+                  </p>
+                  <div
+                    className="mt-2 rounded-xl bg-white/80 p-3 text-xs space-y-1 border border-[var(--line)]"
+                    style={{ fontFamily: "var(--font-mono)" }}
+                  >
+                    <div><strong>Identifiant :</strong> {resetSuccessCred.email}</div>
+                    <div><strong>Mot de passe provisoire :</strong> {resetSuccessCred.password}</div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      copyToClipboard(
+                        `Email: ${resetSuccessCred.email}\nNouveau mot de passe provisoire: ${resetSuccessCred.password}`
+                      )
+                    }
+                    className="btn w-full text-xs py-2.5"
+                  >
+                    {copied ? "✓ Identifiants copiés dans le presse-papier !" : "Copier les identifiants"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setResetModal(null)}
+                    className="btn btn-ghost w-full text-xs py-2"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <p className="text-xs text-stone-600">
+                  Définissez un mot de passe provisoire pour <strong>{resetModal.email}</strong>. L&apos;utilisateur devra le modifier dès sa première connexion.
+                </p>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="label mb-0 text-xs font-semibold" htmlFor="customModalPassword">
+                      Mot de passe provisoire
+                    </label>
+                    <button
+                      type="button"
+                      className="text-xs font-semibold underline text-[var(--brand)] hover:opacity-80"
+                      onClick={() => setCustomPassword(suggestPassword())}
+                    >
+                      Générer un autre
+                    </button>
+                  </div>
+                  <input
+                    id="customModalPassword"
+                    className="input text-sm"
+                    type="text"
+                    value={customPassword}
+                    onChange={(e) => setCustomPassword(e.target.value)}
+                    minLength={6}
+                    required
+                    style={{ fontFamily: "var(--font-mono)" }}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-[var(--line)]">
+                  <button
+                    type="button"
+                    onClick={() => setResetModal(null)}
+                    className="btn btn-ghost text-xs py-2 px-3"
+                    disabled={modalLoading}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn text-xs py-2 px-4"
+                    disabled={modalLoading}
+                  >
+                    {modalLoading ? "Réinitialisation..." : "Confirmer le reset"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {/* MODAL 2: DELETE RESTAURANT */}
+      {deleteOrgModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="card relative max-h-[90vh] w-full max-w-md space-y-4 shadow-2xl border border-[var(--line)] bg-[var(--card)] p-6 rounded-2xl overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[var(--line)] pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-red-700">Supprimer le restaurant</h3>
+                <p className="muted text-xs mt-0.5">{deleteOrgModal.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteOrgModal(null)}
+                className="flex h-7 w-7 items-center justify-center rounded-full text-base hover:bg-black/10 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {modalError ? (
+              <div className="rounded-lg bg-red-100 p-2.5 text-xs text-red-800">
+                {modalError}
+              </div>
+            ) : null}
+
+            <p className="text-sm">
+              Êtes-vous sûr de vouloir supprimer définitivement le restaurant{" "}
+              <strong>« {deleteOrgModal.name} »</strong> ({deleteOrgModal.slug}) ?
+            </p>
+
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-900 space-y-1.5">
+              <div className="font-semibold">Attention : Cette action est irréversible !</div>
+              <ul className="list-disc pl-4 space-y-1 text-red-800">
+                <li>Tous les plats ({deleteOrgModal.counts.items}), tables ({deleteOrgModal.counts.tables}) et commandes ({deleteOrgModal.counts.orders}) seront définitivement effacés.</li>
+                <li><strong>Le compte du gérant restera intact</strong> dans le système et peut être réutilisé pour créer un nouveau restaurant ou géré dans l&apos;onglet « Utilisateurs ».</li>
+              </ul>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--line)]">
+              <button
+                type="button"
+                onClick={() => setDeleteOrgModal(null)}
+                className="btn btn-ghost text-xs py-2 px-3"
+                disabled={modalLoading}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteOrg}
+                disabled={modalLoading}
+                className="btn text-xs py-2 px-4 bg-red-600 hover:bg-red-700 text-white"
+              >
+                {modalLoading ? "Suppression en cours..." : "Supprimer définitivement le restaurant"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* MODAL 3: DELETE USER */}
+      {deleteUserModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="card relative max-h-[90vh] w-full max-w-md space-y-4 shadow-2xl border border-[var(--line)] bg-[var(--card)] p-6 rounded-2xl overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[var(--line)] pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-red-700">Supprimer l&apos;utilisateur</h3>
+                <p className="muted text-xs mt-0.5">
+                  {deleteUserModal.name} · {deleteUserModal.email}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteUserModal(null)}
+                className="flex h-7 w-7 items-center justify-center rounded-full text-base hover:bg-black/10 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {modalError ? (
+              <div className="rounded-lg bg-red-100 p-2.5 text-xs text-red-800">
+                {modalError}
+              </div>
+            ) : null}
+
+            <p className="text-sm">
+              Êtes-vous sûr de vouloir supprimer définitivement le compte utilisateur de{" "}
+              <strong>« {deleteUserModal.name} »</strong> ({deleteUserModal.email}) ?
+            </p>
+
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-900 space-y-1.5">
+              <div className="font-semibold">Conséquences de la suppression :</div>
+              <ul className="list-disc pl-4 space-y-1 text-red-800">
+                <li>L&apos;utilisateur ne pourra plus se connecter à la plateforme.</li>
+                <li>L&apos;adresse email sera libérée et pourra être réutilisée.</li>
+                <li>
+                  {deleteUserModal.memberships.length > 0
+                    ? `Les restaurants gérés (${deleteUserModal.memberships.map((m) => m.organization.name).join(", ")}) resteront intacts mais n'auront plus de gérant assigné.`
+                    : "Cet utilisateur n'est actuellement assigné à aucun restaurant."}
+                </li>
+              </ul>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--line)]">
+              <button
+                type="button"
+                onClick={() => setDeleteUserModal(null)}
+                className="btn btn-ghost text-xs py-2 px-3"
+                disabled={modalLoading}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteUser}
+                disabled={modalLoading}
+                className="btn text-xs py-2 px-4 bg-red-600 hover:bg-red-700 text-white"
+              >
+                {modalLoading ? "Suppression en cours..." : "Supprimer définitivement l'utilisateur"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
