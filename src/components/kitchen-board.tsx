@@ -2,25 +2,26 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatMoney } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
-type OrderItem = {
+export type KitchenOrderItem = {
   id: string;
   name: string;
   quantity: number;
   unitPriceCents: number;
 };
 
-type Order = {
+export type KitchenOrder = {
   id: string;
   status: "PENDING" | "PREPARING" | "READY" | "COMPLETED" | "CANCELLED";
   totalCents: number;
   note: string;
   createdAt: string | Date;
   table: { name: string } | null;
-  items: OrderItem[];
+  items: KitchenOrderItem[];
 };
 
-const nextStatus: Record<string, Order["status"] | null> = {
+const nextStatus: Record<string, KitchenOrder["status"] | null> = {
   PENDING: "PREPARING",
   PREPARING: "READY",
   READY: "COMPLETED",
@@ -28,40 +29,44 @@ const nextStatus: Record<string, Order["status"] | null> = {
   CANCELLED: null,
 };
 
-const labels: Record<string, string> = {
-  PENDING: "Nouvelle",
-  PREPARING: "En prep",
-  READY: "Prête",
-  COMPLETED: "Terminée",
-  CANCELLED: "Annulée",
-};
-
-function timeAgo(value: string | Date) {
-  const then = new Date(value).getTime();
-  const mins = Math.max(0, Math.floor((Date.now() - then) / 60000));
-  if (mins < 1) return "à l'instant";
-  if (mins === 1) return "il y a 1 min";
-  return `il y a ${mins} min`;
-}
-
 export function KitchenBoard({
   orgId,
   initialOrders,
   restaurantName,
 }: {
   orgId: string;
-  initialOrders: Order[];
+  initialOrders: KitchenOrder[];
   restaurantName?: string;
 }) {
+  const { t, isRtl, dir } = useI18n();
   const [orders, setOrders] = useState(initialOrders);
   const [filter, setFilter] = useState<"active" | "all">("active");
   const [tick, setTick] = useState(0);
   const knownIds = useRef(new Set(initialOrders.map((o) => o.id)));
   const audioCtx = useRef<AudioContext | null>(null);
 
+  const labels: Record<string, string> = {
+    PENDING: t.kitchen.pending,
+    PREPARING: t.kitchen.preparing,
+    READY: t.kitchen.ready,
+    COMPLETED: t.kitchen.delivered,
+    CANCELLED: t.kitchen.cancelled,
+  };
+
+  function timeAgo(value: string | Date) {
+    const then = new Date(value).getTime();
+    const mins = Math.max(0, Math.floor((Date.now() - then) / 60000));
+    if (mins < 1) {
+      return isRtl ? "الآن" : t.common.language === "en" ? "just now" : "à l'instant";
+    }
+    return `${mins} ${t.kitchen.minutesAgo}`;
+  }
+
   const beep = useCallback(() => {
     try {
-      const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const Ctx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!Ctx) return;
       audioCtx.current ??= new Ctx();
       const ctx = audioCtx.current;
@@ -82,7 +87,7 @@ export function KitchenBoard({
     const q = filter === "active" ? "?active=1" : "";
     const res = await fetch(`/api/orgs/${orgId}/orders${q}`);
     if (!res.ok) return;
-    const data: Order[] = await res.json();
+    const data: KitchenOrder[] = await res.json();
     const incoming = data.filter((o) => o.status === "PENDING" && !knownIds.current.has(o.id));
     if (incoming.length > 0) beep();
     knownIds.current = new Set(data.map((o) => o.id));
@@ -109,11 +114,11 @@ export function KitchenBoard({
   }, [load]);
 
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 30000);
+    const id = setInterval(() => setTick((tState) => tState + 1), 30000);
     return () => clearInterval(id);
   }, []);
 
-  async function updateStatus(orderId: string, status: Order["status"]) {
+  async function updateStatus(orderId: string, status: KitchenOrder["status"]) {
     await fetch(`/api/orgs/${orgId}/orders`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -125,19 +130,19 @@ export function KitchenBoard({
   const pendingCount = orders.filter((o) => o.status === "PENDING").length;
 
   return (
-    <div>
+    <div dir={dir} className={isRtl ? "rtl" : ""}>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="muted text-sm" style={{ fontFamily: "var(--font-mono)" }}>
             {restaurantName ? `${restaurantName} · ` : ""}
-            Réception des commandes clients (SSE)
+            {t.kitchen.title}
           </p>
           {pendingCount > 0 ? (
             <p className="mt-1 font-semibold text-[var(--brand)]">
-              {pendingCount} nouvelle{pendingCount > 1 ? "s" : ""} commande{pendingCount > 1 ? "s" : ""}
+              {pendingCount} {t.kitchen.pending}
             </p>
           ) : (
-            <p className="muted mt-1 text-sm">En écoute…</p>
+            <p className="muted mt-1 text-sm">{t.kitchen.autoRefresh}</p>
           )}
         </div>
         <div className="flex gap-2">
@@ -146,17 +151,17 @@ export function KitchenBoard({
             className={`btn ${filter === "active" ? "" : "btn-ghost"}`}
             onClick={() => setFilter("active")}
           >
-            Actives
+            {t.common.active}
           </button>
           <button
             type="button"
             className={`btn ${filter === "all" ? "" : "btn-ghost"}`}
             onClick={() => setFilter("all")}
           >
-            Historique
+            {t.common.all}
           </button>
           <button type="button" className="btn btn-ghost" onClick={() => void load()}>
-            Rafraîchir
+            {t.kitchen.autoRefresh}
           </button>
         </div>
       </div>
@@ -177,7 +182,7 @@ export function KitchenBoard({
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="text-xl font-semibold">{order.table?.name ?? "Sans table"}</div>
+                  <div className="text-xl font-semibold">{order.table?.name ?? t.kitchen.table}</div>
                   <div className="muted text-sm" style={{ fontFamily: "var(--font-mono)" }}>
                     {timeAgo(order.createdAt)} · {formatMoney(order.totalCents)}
                   </div>
@@ -203,11 +208,15 @@ export function KitchenBoard({
                   </li>
                 ))}
               </ul>
-              {order.note ? <p className="muted mt-3 text-sm">Note : {order.note}</p> : null}
+              {order.note ? (
+                <p className="muted mt-3 text-sm">
+                  {t.kitchen.specialNote} : {order.note}
+                </p>
+              ) : null}
               <div className="mt-4 flex flex-wrap gap-2">
                 {next ? (
                   <button className="btn" onClick={() => updateStatus(order.id, next)}>
-                    → {labels[next]}
+                    {isRtl ? `← ${labels[next]}` : `→ ${labels[next]}`}
                   </button>
                 ) : null}
                 {order.status !== "CANCELLED" && order.status !== "COMPLETED" ? (
@@ -215,7 +224,7 @@ export function KitchenBoard({
                     className="btn btn-ghost"
                     onClick={() => updateStatus(order.id, "CANCELLED")}
                   >
-                    Annuler
+                    {t.kitchen.cancelOrder}
                   </button>
                 ) : null}
               </div>
@@ -223,10 +232,9 @@ export function KitchenBoard({
           );
         })}
         {orders.length === 0 ? (
-          <div className="card muted md:col-span-2 xl:col-span-3">
-            {filter === "active"
-              ? "Aucune commande active. Les commandes QR apparaîtront ici en direct."
-              : "Aucun historique pour l’instant."}
+          <div className="card muted md:col-span-2 xl:col-span-3 text-center py-8">
+            <h3 className="font-semibold text-base mb-1">{t.kitchen.noOrdersTitle}</h3>
+            <p className="text-xs">{t.kitchen.noOrdersSubtitle}</p>
           </div>
         ) : null}
       </div>

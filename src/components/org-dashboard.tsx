@@ -10,6 +10,8 @@ import { LogoutButton } from "@/components/logout-button";
 import { EditDishModal } from "@/components/edit-dish-modal";
 import { EditCategoryModal } from "@/components/edit-category-modal";
 import { QrPrintModal } from "@/components/qr-print-modal";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import { roleLabel } from "@/lib/roles";
 import Link from "next/link";
 
 type Item = {
@@ -47,6 +49,8 @@ type Props = {
   orgName: string;
   slug: string;
   role: string;
+  isPlatformAdmin?: boolean;
+  isVendeur?: boolean;
   canCustomize?: boolean;
   initialCategories: Category[];
   initialTables: Table[];
@@ -54,7 +58,7 @@ type Props = {
   initialBranding: Branding;
   backHref?: string;
   backLabel?: string;
-  roleLabel: string;
+  roleLabel?: string;
   initialTab?: RestaurantNavId;
 };
 
@@ -63,6 +67,8 @@ export function OrgDashboard({
   orgName: initialOrgName,
   slug,
   role,
+  isPlatformAdmin,
+  isVendeur,
   canCustomize = false,
   initialCategories,
   initialTables,
@@ -70,12 +76,22 @@ export function OrgDashboard({
   initialBranding,
   backHref,
   backLabel,
-  roleLabel,
+  roleLabel: roleLabelProp,
   initialTab = "admin",
 }: Props) {
   const router = useRouter();
+  const { t, isRtl, dir } = useI18n();
   const canEdit = canCustomize;
   const isOwner = role === "OWNER";
+  const displayRole = roleLabel(role, isPlatformAdmin, isVendeur, t) || roleLabelProp || role;
+  const displayBackLabel = backHref
+    ? isPlatformAdmin
+      ? t.roles.platformAdmin
+      : isVendeur
+      ? t.pages.vendeurSpace
+      : backLabel
+    : undefined;
+
   const [tab, setTab] = useState<RestaurantNavId>(
     initialTab === "kitchen" ? "admin" : initialTab,
   );
@@ -165,7 +181,7 @@ export function OrgDashboard({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error || "Impossible d'ajouter la catégorie");
+        setError(data.error || t.common.error);
         return;
       }
       const created = await res.json();
@@ -183,10 +199,10 @@ export function OrgDashboard({
   }
 
   async function deleteCategory(categoryId: string, name: string) {
-    if (!window.confirm(`Supprimer la catégorie « ${name} » et tous ses plats ?`)) return;
+    if (!window.confirm(t.orgDashboard.deleteCategoryPrompt.replace("{name}", name))) return;
     const res = await fetch(`/api/orgs/${orgId}/categories/${categoryId}`, { method: "DELETE" });
     if (!res.ok) {
-      setError("Suppression catégorie impossible");
+      setError(t.common.error);
       return;
     }
     await refresh();
@@ -197,7 +213,7 @@ export function OrgDashboard({
     if (saving) return;
     const price = Number(itemPrice);
     if (!itemCategoryId || !itemName.trim() || !Number.isFinite(price) || price <= 0) {
-      setError("Remplis correctement le plat (prix en DH)");
+      setError(t.orgDashboard.dishFillProperly);
       return;
     }
     setSaving(true);
@@ -207,7 +223,7 @@ export function OrgDashboard({
       try {
         imageUrl = await uploadImage();
       } catch {
-        setError("Upload image échoué");
+        setError(t.orgDashboard.dishUploadFailed);
         return;
       }
       const res = await fetch(`/api/orgs/${orgId}/items`, {
@@ -222,7 +238,7 @@ export function OrgDashboard({
         }),
       });
       if (!res.ok) {
-        setError("Impossible d'ajouter le plat");
+        setError(t.common.error);
         return;
       }
       setItemName("");
@@ -253,7 +269,7 @@ export function OrgDashboard({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Invitation impossible");
+        setError(data.error || t.common.error);
         return;
       }
       setMembers((prev) => [...prev, data]);
@@ -270,10 +286,10 @@ export function OrgDashboard({
   }
 
   async function deleteItem(item: Item) {
-    if (!window.confirm(`Supprimer « ${item.name} » ?`)) return;
+    if (!window.confirm(t.orgDashboard.deleteDishConfirm.replace("{name}", item.name))) return;
     const res = await fetch(`/api/orgs/${orgId}/items/${item.id}`, { method: "DELETE" });
     if (!res.ok) {
-      setError("Suppression plat impossible");
+      setError(t.common.error);
       return;
     }
     await refresh();
@@ -292,7 +308,7 @@ export function OrgDashboard({
         body: JSON.stringify({ name }),
       });
       if (!res.ok) {
-        setError("Impossible d'ajouter la table");
+        setError(t.common.error);
         return;
       }
       const created = await res.json();
@@ -316,12 +332,12 @@ export function OrgDashboard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           count,
-          prefix: bulkPrefix.trim() || "Table",
+          prefix: bulkPrefix.trim() || t.orgDashboard.prefixPlaceholder,
           startFrom: nextTableNumber,
         }),
       });
       if (!res.ok) {
-        setError("Impossible de générer les tables en masse");
+        setError(t.common.error);
         return;
       }
       const created: Table[] = await res.json();
@@ -333,7 +349,7 @@ export function OrgDashboard({
   }
 
   async function renameTable(table: Table) {
-    const name = window.prompt("Nouveau nom de table", table.name)?.trim();
+    const name = window.prompt(t.orgDashboard.renameTablePrompt, table.name)?.trim();
     if (!name || name === table.name) return;
     const res = await fetch(`/api/orgs/${orgId}/tables/${table.id}`, {
       method: "PATCH",
@@ -341,17 +357,17 @@ export function OrgDashboard({
       body: JSON.stringify({ name }),
     });
     if (!res.ok) {
-      setError("Modification table impossible");
+      setError(t.common.error);
       return;
     }
     await refresh();
   }
 
   async function deleteTable(table: Table) {
-    if (!window.confirm(`Supprimer la table « ${table.name} » ?`)) return;
+    if (!window.confirm(t.orgDashboard.deleteTablePrompt.replace("{name}", table.name))) return;
     const res = await fetch(`/api/orgs/${orgId}/tables/${table.id}`, { method: "DELETE" });
     if (!res.ok) {
-      setError("Suppression table impossible");
+      setError(t.common.error);
       return;
     }
     await refresh();
@@ -370,7 +386,7 @@ export function OrgDashboard({
         body: JSON.stringify({ name }),
       });
       if (!res.ok) {
-        setError("Impossible de modifier le restaurant");
+        setError(t.common.error);
         return;
       }
       const updated = await res.json();
@@ -384,14 +400,14 @@ export function OrgDashboard({
   async function deleteRestaurant() {
     if (
       !window.confirm(
-        `Supprimer définitivement « ${orgName} » (menu, tables, commandes) ?`,
+        t.orgDashboard.deleteRestoConfirm.replace("{name}", orgName),
       )
     ) {
       return;
     }
     const res = await fetch(`/api/orgs/${orgId}`, { method: "DELETE" });
     if (!res.ok) {
-      setError("Suppression restaurant impossible (Gérant uniquement)");
+      setError(t.common.error);
       return;
     }
     router.push("/dashboard");
@@ -405,8 +421,8 @@ export function OrgDashboard({
       branding={branding}
       active={tab}
       backHref={backHref}
-      backLabel={backLabel}
-      roleLabel={roleLabel}
+      backLabel={displayBackLabel}
+      roleLabel={displayRole}
       slug={slug}
       pendingOrders={stats.activeOrders}
       onNavigate={(id) => {
@@ -419,7 +435,7 @@ export function OrgDashboard({
       headerActions={
         <>
           <Link href={`/dashboard/${orgId}/kitchen`} className="btn">
-            Voir les commandes
+            {t.dashboardPicker.viewOrders}
           </Link>
           <LogoutButton />
         </>
@@ -448,17 +464,17 @@ export function OrgDashboard({
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-4">
             <section className="card">
-              <h2 className="text-xl font-semibold">Vue admin — {orgName}</h2>
+              <h2 className="text-xl font-semibold">{t.orgDashboard.adminView} — {orgName}</h2>
               <p className="muted mt-1 text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-                Multi-tenant · {role === "OWNER" ? "Gérant" : role === "ADMIN" ? "Responsable" : role} · /{slug} · devises en DH (MAD)
+                Multi-tenant · {role === "OWNER" ? t.roles.owner : role === "ADMIN" ? t.roles.admin : role} · /{slug} · {t.common.currency}
               </p>
               <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {[
-                  ["Catégories", stats.categories],
-                  ["Plats", stats.items],
-                  ["Tables", stats.tables],
-                  ["Commandes", stats.orders],
-                  ["Actives", stats.activeOrders],
+                  [t.orgDashboard.statsCategories, stats.categories],
+                  [t.orgDashboard.statsDishes, stats.items],
+                  [t.orgDashboard.statsTables, stats.tables],
+                  [t.orgDashboard.statsOrders, stats.orders],
+                  [t.orgDashboard.statsActive, stats.activeOrders],
                 ].map(([label, value]) => (
                   <div key={label as string} className="rounded-2xl bg-[rgba(194,65,12,0.08)] p-4">
                     <div className="muted text-xs uppercase tracking-wide">{label}</div>
@@ -469,20 +485,20 @@ export function OrgDashboard({
             </section>
 
             <section className="card space-y-3">
-              <h3 className="text-lg font-semibold">Parcours (architecture)</h3>
+              <h3 className="text-lg font-semibold">{t.orgDashboard.architectureTitle}</h3>
               <ol className="space-y-2 text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-                <li>1. Organisation créée (Gérant)</li>
-                <li>2. Menu : catégories & plats (CRUD)</li>
-                <li>3. Tables + QR imprimables</li>
-                <li>4. Client scanne QR → commande</li>
-                <li>5. Cuisine / dashboard temps réel (SSE)</li>
+                <li>{t.orgDashboard.step1}</li>
+                <li>{t.orgDashboard.step2}</li>
+                <li>{t.orgDashboard.step3}</li>
+                <li>{t.orgDashboard.step4}</li>
+                <li>{t.orgDashboard.step5}</li>
               </ol>
               <div className="flex flex-wrap gap-2 pt-2">
                 <button type="button" className="btn" onClick={() => setTab("menu")}>
-                  Gérer le menu
+                  {t.orgDashboard.manageMenuBtn}
                 </button>
                 <button type="button" className="btn btn-ghost" onClick={() => setTab("tables")}>
-                  Gérer les tables
+                  {t.orgDashboard.manageTablesBtn}
                 </button>
               </div>
             </section>
@@ -491,13 +507,13 @@ export function OrgDashboard({
           <div className="space-y-4">
             {canEdit ? (
               <form onSubmit={inviteMember} className="card space-y-3">
-                <h3 className="text-lg font-semibold">Inviter l&apos;équipe</h3>
+                <h3 className="text-lg font-semibold">{t.orgDashboard.inviteTeamTitle}</h3>
                 <p className="muted text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-                  Compte avec mot de passe provisoire — accès limité à ce restaurant.
+                  {t.orgDashboard.inviteTeamSubtitle}
                 </p>
                 <input
                   className="input"
-                  placeholder="Nom"
+                  placeholder={t.orgDashboard.namePlaceholder}
                   value={inviteName}
                   onChange={(e) => setInviteName(e.target.value)}
                   required
@@ -505,7 +521,7 @@ export function OrgDashboard({
                 <input
                   className="input"
                   type="email"
-                  placeholder="Email"
+                  placeholder={t.orgDashboard.emailPlaceholder}
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   required
@@ -513,7 +529,7 @@ export function OrgDashboard({
                 <input
                   className="input"
                   type="password"
-                  placeholder="Mot de passe provisoire"
+                  placeholder={t.orgDashboard.provisionalPassword}
                   value={invitePassword}
                   onChange={(e) => setInvitePassword(e.target.value)}
                   minLength={6}
@@ -524,17 +540,17 @@ export function OrgDashboard({
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value as "ADMIN" | "MEMBER")}
                 >
-                  <option value="ADMIN">Responsable (menu + commandes)</option>
-                  <option value="MEMBER">Équipe (commandes)</option>
+                  <option value="ADMIN">{t.orgDashboard.roleAdminOption}</option>
+                  <option value="MEMBER">{t.orgDashboard.roleMemberOption}</option>
                 </select>
                 <button className="btn" disabled={saving}>
-                  Inviter
+                  {t.orgDashboard.inviteButton}
                 </button>
                 {members.length > 0 ? (
                   <ul className="space-y-1 pt-2 text-sm" style={{ fontFamily: "var(--font-mono)" }}>
                     {members.map((m) => (
                       <li key={m.id}>
-                        {m.user.name} · {m.role === "OWNER" ? "Gérant" : m.role === "ADMIN" ? "Responsable" : "Équipe"} ·{" "}
+                        {m.user.name} · {m.role === "OWNER" ? t.roles.owner : m.role === "ADMIN" ? t.roles.admin : t.roles.member} ·{" "}
                         {m.user.email}
                       </li>
                     ))}
@@ -545,7 +561,7 @@ export function OrgDashboard({
 
             {canEdit ? (
               <form onSubmit={saveRestaurant} className="card space-y-3">
-                <h3 className="text-lg font-semibold">Modifier le restaurant</h3>
+                <h3 className="text-lg font-semibold">{t.orgDashboard.editRestoTitle}</h3>
                 <input
                   className="input"
                   value={editOrgName}
@@ -554,10 +570,10 @@ export function OrgDashboard({
                 />
                 <div className="flex flex-wrap gap-2">
                   <button className="btn" disabled={saving}>
-                    Enregistrer
+                    {t.common.save}
                   </button>
                   <button type="button" className="btn btn-ghost" onClick={() => setTab("settings")}>
-                    Settings · logo & couleurs
+                    {t.orgDashboard.saveSettingsPrompt}
                   </button>
                 </div>
               </form>
@@ -565,12 +581,12 @@ export function OrgDashboard({
 
             {isOwner ? (
               <div className="card space-y-3 border-red-200">
-                <h3 className="text-lg font-semibold text-red-800">Zone danger</h3>
+                <h3 className="text-lg font-semibold text-red-800">{t.orgDashboard.dangerZoneTitle}</h3>
                 <p className="muted text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-                  Supprime l&apos;organisation et toutes ses données (Gérant uniquement).
+                  {t.orgDashboard.dangerZoneSubtitle}
                 </p>
                 <button type="button" className="btn" style={{ background: "#b91c1c" }} onClick={deleteRestaurant}>
-                  Supprimer le restaurant
+                  {t.orgDashboard.deleteRestoButton}
                 </button>
               </div>
             ) : null}
@@ -583,20 +599,20 @@ export function OrgDashboard({
           {canEdit ? (
             <div className="space-y-4">
               <form onSubmit={addCategory} className="card space-y-3">
-                <h2 className="text-xl font-semibold">Nouvelle catégorie</h2>
+                <h2 className="text-xl font-semibold">{t.orgDashboard.newCategoryTitle}</h2>
                 <input
                   className="input"
-                  placeholder="Ex. Tajines"
+                  placeholder={t.orgDashboard.categoryPlaceholder}
                   value={categoryName}
                   onChange={(e) => setCategoryName(e.target.value)}
                   required
                 />
                 <button className="btn" disabled={saving || !categoryName.trim()}>
-                  {saving ? "..." : "Ajouter"}
+                  {saving ? "..." : t.orgDashboard.addCategoryButton}
                 </button>
               </form>
               <form onSubmit={addItem} className="card space-y-3">
-                <h2 className="text-xl font-semibold">Nouveau plat</h2>
+                <h2 className="text-xl font-semibold">{t.orgDashboard.newDishTitle}</h2>
                 <select
                   className="input"
                   required
@@ -604,7 +620,7 @@ export function OrgDashboard({
                   onChange={(e) => setItemCategoryId(e.target.value)}
                 >
                   <option value="" disabled>
-                    Catégorie
+                    {t.orgDashboard.categorySelectDefault}
                   </option>
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -614,14 +630,14 @@ export function OrgDashboard({
                 </select>
                 <input
                   className="input"
-                  placeholder="Nom du plat"
+                  placeholder={t.orgDashboard.dishNamePlaceholder}
                   value={itemName}
                   onChange={(e) => setItemName(e.target.value)}
                   required
                 />
                 <input
                   className="input"
-                  placeholder="Description"
+                  placeholder={t.orgDashboard.dishDescPlaceholder}
                   value={itemDescription}
                   onChange={(e) => setItemDescription(e.target.value)}
                 />
@@ -630,13 +646,13 @@ export function OrgDashboard({
                   type="number"
                   step="0.01"
                   min="0.01"
-                  placeholder="Prix en DH (ex. 45.00)"
+                  placeholder={t.orgDashboard.dishPricePlaceholder}
                   value={itemPrice}
                   onChange={(e) => setItemPrice(e.target.value)}
                   required
                 />
                 <div>
-                  <label className="label">Image du plat (optionnel)</label>
+                  <label className="label">{t.orgDashboard.dishImageLabel}</label>
                   <input
                     className="input"
                     type="file"
@@ -645,19 +661,19 @@ export function OrgDashboard({
                   />
                 </div>
                 <button className="btn" disabled={saving || categories.length === 0}>
-                  {saving ? "..." : "Ajouter le plat"}
+                  {saving ? "..." : t.orgDashboard.addDishButton}
                 </button>
               </form>
             </div>
           ) : (
             <div className="card muted text-sm font-semibold">
-              🔒 La personnalisation du menu et des tarifs est exclusivement réservée au Vendeur.
+              {t.orgDashboard.vendorOnlyNotice}
             </div>
           )}
 
           <div className="space-y-4">
             {categories.length === 0 ? (
-              <div className="card muted">Aucune catégorie pour l&apos;instant.</div>
+              <div className="card muted">{t.orgDashboard.noCategories}</div>
             ) : null}
             {categories.map((cat) => (
               <section key={cat.id} className="card">
@@ -666,10 +682,10 @@ export function OrgDashboard({
                   {canEdit ? (
                     <div className="flex gap-2">
                       <button type="button" className="btn btn-ghost" onClick={() => renameCategory(cat.id, cat.name)}>
-                        Modifier
+                        {t.orgDashboard.editAction}
                       </button>
                       <button type="button" className="btn btn-ghost" onClick={() => deleteCategory(cat.id, cat.name)}>
-                        Supprimer
+                        {t.orgDashboard.deleteAction}
                       </button>
                     </div>
                   ) : null}
@@ -705,17 +721,17 @@ export function OrgDashboard({
                         {canEdit ? (
                           <div className="flex gap-1">
                             <button type="button" className="btn btn-ghost px-2 py-1 text-xs" onClick={() => editItem(item)}>
-                              Modif
+                              {t.orgDashboard.editAction}
                             </button>
                             <button type="button" className="btn btn-ghost px-2 py-1 text-xs" onClick={() => deleteItem(item)}>
-                              Suppr
+                              {t.orgDashboard.deleteAction}
                             </button>
                           </div>
                         ) : null}
                       </div>
                     </li>
                   ))}
-                  {cat.items.length === 0 ? <li className="muted text-sm">Aucun plat</li> : null}
+                  {cat.items.length === 0 ? <li className="muted text-sm">{t.orgDashboard.noDishesInCategory}</li> : null}
                 </ul>
               </section>
             ))}
@@ -727,9 +743,9 @@ export function OrgDashboard({
         <div className="space-y-6">
           <div className="card flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold">Gestion des tables &amp; QR</h2>
+              <h2 className="text-xl font-semibold">{t.orgDashboard.tablesAndQrTitle}</h2>
               <p className="muted text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-                {tables.length} table{tables.length > 1 ? "s" : ""} · Prêt pour impression et affichage sur table
+                {tables.length} {t.orgDashboard.statsTables} · {t.orgDashboard.tableReadyHint}
               </p>
             </div>
             <button
@@ -751,7 +767,7 @@ export function OrgDashboard({
                   d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
                 />
               </svg>
-              Imprimer les QR codes
+              {t.orgDashboard.printQrButton}
             </button>
           </div>
 
@@ -759,7 +775,7 @@ export function OrgDashboard({
           {canEdit ? (
             <div className="card h-fit space-y-4">
               <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: "var(--line)" }}>
-                <h2 className="text-lg font-semibold">Ajouter des tables</h2>
+                <h2 className="text-lg font-semibold">{t.orgDashboard.addTable}</h2>
                 <div className="flex rounded-full bg-[rgba(0,0,0,0.06)] p-0.5 text-xs font-medium">
                   <button
                     type="button"
@@ -770,7 +786,7 @@ export function OrgDashboard({
                         : "text-stone-600 hover:text-stone-900"
                     }`}
                   >
-                    Une table
+                    {t.orgDashboard.modeSingle}
                   </button>
                   <button
                     type="button"
@@ -781,7 +797,7 @@ export function OrgDashboard({
                         : "text-stone-600 hover:text-stone-900"
                     }`}
                   >
-                    ⚡ En masse
+                    {t.orgDashboard.modeBulk}
                   </button>
                 </div>
               </div>
@@ -789,23 +805,23 @@ export function OrgDashboard({
               {tableMode === "single" ? (
                 <form onSubmit={addTable} className="space-y-3">
                   <div>
-                    <label className="label">Nom de la table</label>
+                    <label className="label">{t.orgDashboard.tableNamePlaceholder}</label>
                     <input
                       className="input"
-                      placeholder="Ex. Table 12 ou VIP"
+                      placeholder={t.orgDashboard.singleTablePlaceholder}
                       value={tableName}
                       onChange={(e) => setTableName(e.target.value)}
                       required
                     />
                   </div>
                   <button className="btn w-full" disabled={saving || !tableName.trim()}>
-                    {saving ? "..." : "Générer QR"}
+                    {saving ? "..." : t.orgDashboard.generateQrButton}
                   </button>
                 </form>
               ) : (
                 <form onSubmit={addBulkTables} className="space-y-3">
                   <div>
-                    <label className="label">Combien de tables avez-vous ?</label>
+                    <label className="label">{t.orgDashboard.howManyTables}</label>
                     <input
                       type="number"
                       min={1}
@@ -818,10 +834,10 @@ export function OrgDashboard({
                     />
                   </div>
                   <div>
-                    <label className="label">Préfixe du nom</label>
+                    <label className="label">{t.orgDashboard.prefixLabel}</label>
                     <input
                       className="input"
-                      placeholder="Table"
+                      placeholder={t.orgDashboard.prefixPlaceholder}
                       value={bulkPrefix}
                       onChange={(e) => setBulkPrefix(e.target.value)}
                     />
@@ -829,20 +845,14 @@ export function OrgDashboard({
 
                   {parseInt(bulkCount, 10) > 0 ? (
                     <div className="rounded-xl bg-[rgba(194,65,12,0.08)] p-3 text-xs leading-relaxed text-stone-700">
-                      <span className="font-semibold text-orange-800">Aperçu : </span>
-                      Générera {bulkCount} table{parseInt(bulkCount, 10) > 1 ? "s" : ""} de{" "}
-                      <strong className="text-stone-900">
-                        {bulkPrefix.trim() || "Table"}{" "}
-                        {String(nextTableNumber).padStart(2, "0")}
-                      </strong>{" "}
-                      à{" "}
-                      <strong className="text-stone-900">
-                        {bulkPrefix.trim() || "Table"}{" "}
-                        {String(nextTableNumber + parseInt(bulkCount, 10) - 1).padStart(
+                      <span className="font-semibold text-orange-800">{t.orgDashboard.previewLabel} : </span>
+                      {t.orgDashboard.previewBulk
+                        .replace("{count}", bulkCount)
+                        .replace("{start}", `${bulkPrefix.trim() || t.orgDashboard.prefixPlaceholder} ${String(nextTableNumber).padStart(2, "0")}`)
+                        .replace("{end}", `${bulkPrefix.trim() || t.orgDashboard.prefixPlaceholder} ${String(nextTableNumber + parseInt(bulkCount, 10) - 1).padStart(
                           Math.max(2, String(nextTableNumber + parseInt(bulkCount, 10) - 1).length),
                           "0",
-                        )}
-                      </strong>
+                        )}`)}
                     </div>
                   ) : null}
 
@@ -850,13 +860,15 @@ export function OrgDashboard({
                     className="btn w-full flex items-center justify-center gap-2"
                     disabled={saving || !bulkCount || parseInt(bulkCount, 10) < 1}
                   >
-                    {saving ? "Génération en cours..." : `⚡ Générer ${bulkCount || ""} tables & QR`}
+                    {saving
+                      ? t.orgDashboard.generatingTables
+                      : t.orgDashboard.generateBulkButton.replace("{count}", bulkCount || "")}
                   </button>
                 </form>
               )}
             </div>
           ) : (
-            <div className="card muted">Lecture seule</div>
+            <div className="card muted">{t.orgDashboard.readOnly}</div>
           )}
           <div className="grid gap-4 sm:grid-cols-2">
             {tables.map((table) => {
@@ -877,15 +889,15 @@ export function OrgDashboard({
                   </p>
                   <div className="mt-3 flex flex-wrap justify-center gap-2">
                     <a className="btn btn-ghost" href={url} target="_blank" rel="noreferrer">
-                      Menu client
+                      {t.orgDashboard.customerMenuLink}
                     </a>
                     {canEdit ? (
                       <>
                         <button type="button" className="btn btn-ghost" onClick={() => renameTable(table)}>
-                          Modifier
+                          {t.orgDashboard.editAction}
                         </button>
                         <button type="button" className="btn btn-ghost" onClick={() => deleteTable(table)}>
-                          Supprimer
+                          {t.orgDashboard.deleteAction}
                         </button>
                       </>
                     ) : null}
@@ -893,7 +905,7 @@ export function OrgDashboard({
                 </article>
               );
             })}
-            {tables.length === 0 ? <div className="card muted">Aucune table.</div> : null}
+            {tables.length === 0 ? <div className="card muted">{t.orgDashboard.noTables}</div> : null}
           </div>
         </div>
         </div>

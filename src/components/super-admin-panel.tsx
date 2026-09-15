@@ -2,7 +2,11 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
+
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { LogoutButton } from "@/components/logout-button";
 
 type Owner = {
   id: string;
@@ -78,15 +82,19 @@ export function SuperAdminPanel({
   currentUserId,
   initialStats,
   initialVendeurs = [],
+  userEmail,
 }: {
   initialOrgs: OrgRow[];
   initialUsers?: UserRow[];
   currentUserId?: string;
   initialStats: Stats;
   initialVendeurs?: Vendeur[];
+  userEmail?: string;
 }) {
   const router = useRouter();
+  const { t, isRtl, dir } = useI18n();
   const [activeTab, setActiveTab] = useState<"restaurants" | "vendeurs" | "users">("restaurants");
+
 
   const [orgs, setOrgs] = useState<OrgRow[]>(initialOrgs);
   const [users, setUsers] = useState<UserRow[]>(initialUsers);
@@ -416,14 +424,35 @@ export function SuperAdminPanel({
   }
 
   return (
-    <div className="space-y-8">
+    <div dir={dir} className={`space-y-8 ${isRtl ? "rtl text-right" : ""}`}>
+      <header className="overflow-hidden rounded-[1.75rem] border border-[var(--line)] bg-[var(--card)] px-6 py-7 shadow-[0_16px_48px_rgba(28,25,23,0.07)]">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="muted text-sm uppercase tracking-[0.22em]">{t.pages.platformBadge}</p>
+            <h1 className="mt-1 text-4xl font-semibold tracking-tight">{t.roles.platformAdmin}</h1>
+            <p className="muted mt-2 max-w-xl text-sm" style={{ fontFamily: "var(--font-mono)" }}>
+              {t.pages.platformSubtitle}
+            </p>
+            {userEmail ? (
+              <p className="muted mt-3 text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+                {t.pages.connectedAs} · {userEmail}
+              </p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <LanguageSwitcher variant="dropdown" />
+            <LogoutButton />
+          </div>
+        </div>
+      </header>
+
       {/* Platform Stats Cards */}
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          ["Account Managers (Vendeurs)", stats.vendeursCount ?? vendeurs.length, "Gestionnaires de portefeuille"],
-          ["Restaurants", stats.restaurants, "Créés sur la plateforme"],
-          ["Comptes Globaux", stats.users, "Vendeurs, gérants & équipes"],
-          ["Commandes live", stats.activeOrders, "En cours sur la plateforme"],
+          [t.superAdmin.statVendors, stats.vendeursCount ?? vendeurs.length, t.superAdmin.statVendorsHint],
+          [t.superAdmin.statRestaurants, stats.restaurants, t.superAdmin.statRestaurantsHint],
+          [t.superAdmin.statAccounts, stats.users, t.superAdmin.statAccountsHint],
+          [t.kitchen.liveOrders, stats.activeOrders, t.kitchen.autoRefresh],
         ].map(([label, value, hint]) => (
           <div
             key={label as string}
@@ -455,7 +484,7 @@ export function SuperAdminPanel({
               : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]"
           }`}
         >
-          <span>Restaurants</span>
+          <span>{t.superAdmin.tabRestaurants}</span>
           <span className="rounded-full bg-[var(--line)] px-2 py-0.5 text-xs font-mono text-[var(--ink)]">
             {orgs.length}
           </span>
@@ -469,7 +498,7 @@ export function SuperAdminPanel({
               : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]"
           }`}
         >
-          <span>Gestion des Vendeurs</span>
+          <span>{t.superAdmin.tabVendors}</span>
           <span className="rounded-full bg-[var(--line)] px-2 py-0.5 text-xs font-mono text-[var(--ink)]">
             {vendeurs.length}
           </span>
@@ -483,12 +512,13 @@ export function SuperAdminPanel({
               : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]"
           }`}
         >
-          <span>Utilisateurs</span>
+          <span>{t.superAdmin.tabUsers}</span>
           <span className="rounded-full bg-[var(--line)] px-2 py-0.5 text-xs font-mono text-[var(--ink)]">
             {users.length}
           </span>
         </button>
       </div>
+
 
       {/* TAB 1: RESTAURANTS */}
       {activeTab === "restaurants" ? (
@@ -498,34 +528,33 @@ export function SuperAdminPanel({
             className="space-y-4 rounded-[1.5rem] border border-[var(--line)] bg-[var(--card)] p-5 shadow-[0_12px_40px_rgba(28,25,23,0.06)]"
           >
             <div>
-              <p className="muted text-xs uppercase tracking-[0.16em]">Direct SuperAdmin</p>
-              <h2 className="mt-1 text-2xl font-semibold">Créer un restaurant</h2>
+              <p className="muted text-xs uppercase tracking-[0.16em]">{t.superAdmin.directSuperAdmin}</p>
+              <h2 className="mt-1 text-2xl font-semibold">{t.superAdmin.createRestaurantTitle}</h2>
               <p className="muted mt-1 text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-                Le gérant n&apos;accède qu&apos;à son espace, avec un mot de passe provisoire à
-                changer à la 1<sup>re</sup> connexion.
+                {t.superAdmin.createRestaurantSubtitle}
               </p>
             </div>
 
-            <input className="input" name="restaurantName" placeholder="Nom du restaurant" required />
-            <input className="input" name="ownerName" placeholder="Nom du gérant" required />
+            <input className="input" name="restaurantName" placeholder={t.superAdmin.restaurantName} required />
+            <input className="input" name="ownerName" placeholder={t.superAdmin.managerName} required />
             <input
               className="input"
               name="ownerEmail"
               type="email"
-              placeholder="Email du gérant"
+              placeholder={t.superAdmin.managerEmail}
               required
             />
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <label className="label mb-0" htmlFor="ownerPassword">
-                  Mot de passe provisoire
+                  {t.superAdmin.provisionalPassword}
                 </label>
                 <button
                   type="button"
                   className="text-xs font-semibold underline opacity-70 hover:opacity-100"
                   onClick={() => setProvisionalPassword(suggestPassword())}
                 >
-                  Générer
+                  {t.superAdmin.generatePassword}
                 </button>
               </div>
               <input
@@ -552,11 +581,11 @@ export function SuperAdminPanel({
                   background: "color-mix(in srgb, var(--ok) 8%, white)",
                 }}
               >
-                <div className="font-semibold text-emerald-800">Compte gérant créé !</div>
+                <div className="font-semibold text-emerald-800">{t.superAdmin.managerAccountCreated}</div>
                 <div className="text-xs opacity-90 space-y-1" style={{ fontFamily: "var(--font-mono)" }}>
-                  <div><strong>Restaurant :</strong> {createdCred.restaurant}</div>
-                  <div><strong>Email :</strong> {createdCred.email}</div>
-                  <div><strong>MDP :</strong> {createdCred.password}</div>
+                  <div><strong>{t.superAdmin.restaurantName} :</strong> {createdCred.restaurant}</div>
+                  <div><strong>{t.superAdmin.managerEmail} :</strong> {createdCred.email}</div>
+                  <div><strong>{t.superAdmin.provisionalPassword} :</strong> {createdCred.password}</div>
                 </div>
                 <div className="flex flex-wrap gap-2 pt-1">
                   <button
@@ -568,29 +597,29 @@ export function SuperAdminPanel({
                     }
                     className="btn btn-ghost text-xs py-1.5 px-3"
                   >
-                    {copied ? "✓ Identifiants copiés !" : "Copier les identifiants"}
+                    {copied ? `✓ ${t.common.copied}` : t.common.copy}
                   </button>
                   <Link href={`/dashboard/${createdCred.orgId}`} className="btn text-xs py-1.5 px-3">
-                    Ouvrir le restaurant
+                    {t.superAdmin.openRestaurant}
                   </Link>
                 </div>
               </div>
             ) : null}
 
             <button className="btn w-full" disabled={loading}>
-              {loading ? "Création en cours..." : "Créer resto + compte gérant"}
+              {loading ? t.common.loading : t.superAdmin.createRestaurantButton}
             </button>
           </form>
 
           <section className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <p className="muted text-xs uppercase tracking-[0.16em]">Ownership Global</p>
-                <h2 className="text-2xl font-semibold">Tous les restaurants</h2>
+                <p className="muted text-xs uppercase tracking-[0.16em]">{t.pages.platformBadge}</p>
+                <h2 className="text-2xl font-semibold">{t.superAdmin.allRestaurantsTitle}</h2>
               </div>
               <input
                 className="input max-w-xs"
-                placeholder="Rechercher resto, gérant ou vendeur…"
+                placeholder={t.superAdmin.searchRestaurantPlaceholder}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -598,7 +627,7 @@ export function SuperAdminPanel({
 
             {filteredOrgs.length === 0 ? (
               <div className="rounded-[1.35rem] border border-dashed border-[var(--line)] bg-[var(--card)] p-8 text-center">
-                <p className="muted">Aucun restaurant trouvé.</p>
+                <p className="muted">{t.superAdmin.noRestaurantsFound}</p>
               </div>
             ) : null}
 
@@ -614,38 +643,38 @@ export function SuperAdminPanel({
                         <h3 className="text-lg font-semibold">{org.name}</h3>
                         {org.vendeur ? (
                           <span className="text-xs bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-full font-medium">
-                            Vendeur : {org.vendeur.name}
+                            {t.superAdmin.vendorBadge} : {org.vendeur.name}
                           </span>
                         ) : (
                           <span className="text-xs bg-stone-100 text-stone-700 px-2 py-0.5 rounded-full font-medium">
-                            SuperAdmin direct
+                            {t.superAdmin.directSuperAdmin}
                           </span>
                         )}
                       </div>
                       <p className="muted text-sm mt-1" style={{ fontFamily: "var(--font-mono)" }}>
-                        /{org.slug} · {org.counts.items} plats · {org.counts.tables} tables ·{" "}
-                        {org.counts.orders} cmd
+                        /{org.slug} · {org.counts.items} {t.customerMenu.dishes} · {org.counts.tables} {t.customerMenu.tables} ·{" "}
+                        {org.counts.orders} {t.customerMenu.orders}
                       </p>
                       <div className="mt-3 rounded-xl bg-[rgba(194,65,12,0.06)] px-3 py-2 text-sm">
-                        <div className="text-xs uppercase tracking-[0.14em] opacity-55">Gérant (Exploitation)</div>
+                        <div className="text-xs uppercase tracking-[0.14em] opacity-55">{t.superAdmin.managerLabel}</div>
                         {org.owner ? (
                           <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                             <span className="font-semibold">{org.owner.name}</span>
                             <span className="muted"> · {org.owner.email}</span>
                             {org.owner.mustChangePassword ? (
                               <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800">
-                                MDP provisoire
+                                {t.superAdmin.provisionalPasswordBadge}
                               </span>
                             ) : null}
                           </div>
                         ) : (
-                          <div className="muted mt-0.5 text-xs italic">Aucun gérant assigné</div>
+                          <div className="muted mt-0.5 text-xs italic">{t.superAdmin.noManagerAssigned}</div>
                         )}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Link href={`/dashboard/${org.id}`} className="btn btn-ghost text-xs py-2 px-3">
-                        Voir le resto
+                        {t.superAdmin.openRestaurant}
                       </Link>
                       {org.owner ? (
                         <button
@@ -655,7 +684,7 @@ export function SuperAdminPanel({
                             openResetModal("org", org.id, org.name, org.owner?.email || "")
                           }
                         >
-                          Reset MDP Gérant
+                          {t.superAdmin.resetManagerPassword}
                         </button>
                       ) : null}
                       <button
@@ -666,7 +695,7 @@ export function SuperAdminPanel({
                           setDeleteOrgModal(org);
                         }}
                       >
-                        Supprimer
+                        {t.common.delete}
                       </button>
                     </div>
                   </div>
@@ -686,27 +715,27 @@ export function SuperAdminPanel({
             className="space-y-4 rounded-[1.5rem] border border-[var(--line)] bg-[var(--card)] p-5 shadow-[0_12px_40px_rgba(28,25,23,0.06)]"
           >
             <div>
-              <p className="muted text-xs uppercase tracking-[0.16em]">Nouveau Partenaire</p>
-              <h2 className="mt-1 text-2xl font-semibold">Créer un Vendeur</h2>
+              <p className="muted text-xs uppercase tracking-[0.16em]">{t.pages.vendeurBadge}</p>
+              <h2 className="mt-1 text-2xl font-semibold">{t.superAdmin.createVendorTitle}</h2>
               <p className="muted mt-1 text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-                Un Account Manager (Vendeur) peut créer ses propres restaurants et leur assigner des gérants.
+                {t.superAdmin.createVendorSubtitle}
               </p>
             </div>
 
-            <input className="input" name="name" placeholder="Nom complet du vendeur" required />
-            <input className="input" name="email" type="email" placeholder="Email professionnel" required />
+            <input className="input" name="name" placeholder={t.superAdmin.vendorName} required />
+            <input className="input" name="email" type="email" placeholder={t.superAdmin.vendorEmail} required />
 
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <label className="label mb-0" htmlFor="vendeurPassword">
-                  Mot de passe provisoire
+                  {t.superAdmin.provisionalPassword}
                 </label>
                 <button
                   type="button"
                   className="text-xs font-semibold underline opacity-70 hover:opacity-100"
                   onClick={() => setVendeurPassword(suggestPassword())}
                 >
-                  Générer
+                  {t.superAdmin.generatePassword}
                 </button>
               </div>
               <input
@@ -733,11 +762,11 @@ export function SuperAdminPanel({
                   background: "color-mix(in srgb, var(--ok) 8%, white)",
                 }}
               >
-                <div className="font-semibold text-emerald-800">Compte Vendeur créé !</div>
+                <div className="font-semibold text-emerald-800">{t.superAdmin.vendorAccountCreated}</div>
                 <div className="text-xs opacity-90 space-y-1" style={{ fontFamily: "var(--font-mono)" }}>
-                  <div><strong>Nom :</strong> {createdVendeurCred.name}</div>
-                  <div><strong>Email :</strong> {createdVendeurCred.email}</div>
-                  <div><strong>MDP provisoire :</strong> {createdVendeurCred.password}</div>
+                  <div><strong>{t.superAdmin.vendorName} :</strong> {createdVendeurCred.name}</div>
+                  <div><strong>{t.superAdmin.vendorEmail} :</strong> {createdVendeurCred.email}</div>
+                  <div><strong>{t.superAdmin.provisionalPassword} :</strong> {createdVendeurCred.password}</div>
                 </div>
                 <div className="pt-1">
                   <button
@@ -749,14 +778,14 @@ export function SuperAdminPanel({
                     }
                     className="btn btn-ghost text-xs py-1.5 px-3"
                   >
-                    {copied ? "✓ Identifiants copiés !" : "Copier les identifiants"}
+                    {copied ? `✓ ${t.common.copied}` : t.common.copy}
                   </button>
                 </div>
               </div>
             ) : null}
 
             <button className="btn w-full" disabled={loading}>
-              {loading ? "Création..." : "Créer le compte Vendeur"}
+              {loading ? t.common.loading : t.superAdmin.createVendorButton}
             </button>
           </form>
 
@@ -764,12 +793,12 @@ export function SuperAdminPanel({
           <section className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <p className="muted text-xs uppercase tracking-[0.16em]">Portefeuille Partenaires</p>
-                <h2 className="text-2xl font-semibold">Tous les Vendeurs</h2>
+                <p className="muted text-xs uppercase tracking-[0.16em]">{t.pages.vendeurBadge}</p>
+                <h2 className="text-2xl font-semibold">{t.superAdmin.allVendorsTitle}</h2>
               </div>
               <input
                 className="input max-w-xs"
-                placeholder="Rechercher vendeur…"
+                placeholder={t.superAdmin.searchVendorPlaceholder}
                 value={vendeurQuery}
                 onChange={(e) => setVendeurQuery(e.target.value)}
               />
@@ -777,7 +806,7 @@ export function SuperAdminPanel({
 
             {filteredVendeurs.length === 0 ? (
               <div className="rounded-[1.35rem] border border-dashed border-[var(--line)] bg-[var(--card)] p-8 text-center">
-                <p className="muted">Aucun vendeur enregistré.</p>
+                <p className="muted">{t.superAdmin.noVendorsFound}</p>
               </div>
             ) : null}
 
@@ -791,11 +820,11 @@ export function SuperAdminPanel({
                     <div className="min-w-0">
                       <h3 className="text-base font-semibold">{v.name}</h3>
                       <p className="muted text-sm mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>
-                        {v.email} · {v._count.vendeurOrganizations} restaurant(s) créé(s)
+                        {v.email} · {v._count.vendeurOrganizations} {t.customerMenu.tables} / {t.superAdmin.tabRestaurants}
                       </p>
                       {v.mustChangePassword ? (
                         <p className="text-xs text-amber-800 font-semibold mt-1">
-                          (En attente de 1re connexion / changement MDP)
+                          ({t.superAdmin.provisionalPasswordBadge})
                         </p>
                       ) : null}
                     </div>
@@ -804,9 +833,9 @@ export function SuperAdminPanel({
                       <button
                         type="button"
                         className="btn btn-ghost text-xs py-2 px-3"
-                        onClick={() => openResetModal("vendeur", v.id, `Vendeur ${v.name}`, v.email)}
+                        onClick={() => openResetModal("vendeur", v.id, `${t.superAdmin.vendorBadge} ${v.name}`, v.email)}
                       >
-                        Reset MDP
+                        {t.superAdmin.resetManagerPassword}
                       </button>
                       <button
                         type="button"
@@ -816,7 +845,7 @@ export function SuperAdminPanel({
                           setDeleteVendeurModal(v);
                         }}
                       >
-                        Supprimer
+                        {t.common.delete}
                       </button>
                     </div>
                   </div>
@@ -832,15 +861,15 @@ export function SuperAdminPanel({
         <section className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="muted text-xs uppercase tracking-[0.16em]">Comptes & Accès</p>
-              <h2 className="text-2xl font-semibold">Gestion des utilisateurs</h2>
+              <p className="muted text-xs uppercase tracking-[0.16em]">{t.pages.platformBadge}</p>
+              <h2 className="text-2xl font-semibold">{t.superAdmin.usersTitle}</h2>
               <p className="muted text-xs mt-1" style={{ fontFamily: "var(--font-mono)" }}>
-                Gérez les comptes indépendamment des restaurants. La suppression d&apos;un compte libère son adresse email.
+                {t.superAdmin.usersSubtitle}
               </p>
             </div>
             <input
               className="input max-w-xs"
-              placeholder="Rechercher nom, email, restaurant…"
+              placeholder={t.superAdmin.searchUsersPlaceholder}
               value={userQuery}
               onChange={(e) => setUserQuery(e.target.value)}
             />
@@ -848,7 +877,7 @@ export function SuperAdminPanel({
 
           {filteredUsers.length === 0 ? (
             <div className="rounded-[1.35rem] border border-dashed border-[var(--line)] bg-[var(--card)] p-8 text-center">
-              <p className="muted">Aucun utilisateur trouvé.</p>
+              <p className="muted">{t.superAdmin.noUsersFound}</p>
             </div>
           ) : null}
 
@@ -872,27 +901,27 @@ export function SuperAdminPanel({
                           <h3 className="font-semibold text-base">{u.name}</h3>
                           {isCurrent ? (
                             <span className="rounded-md bg-stone-200 px-2 py-0.5 text-xs font-semibold text-stone-700">
-                              Votre compte
+                              {t.superAdmin.yourAccount}
                             </span>
                           ) : null}
                           {u.isSuperAdmin ? (
                             <span className="rounded-md bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-800">
-                              Super Admin
+                              {t.superAdmin.superAdminBadge}
                             </span>
                           ) : null}
                           {u.isVendeur ? (
                             <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                              Vendeur
+                              {t.superAdmin.vendorRoleBadge}
                             </span>
                           ) : null}
                           {u.mustChangePassword ? (
                             <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                              MDP provisoire
+                              {t.superAdmin.provisionalPasswordBadge}
                             </span>
                           ) : null}
                         </div>
                         <p className="muted text-xs mt-1" style={{ fontFamily: "var(--font-mono)" }}>
-                          {u.email} · Inscrit le {new Date(u.createdAt).toLocaleDateString("fr-FR")}
+                          {u.email}
                         </p>
                         {hasMemberships ? (
                           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -907,7 +936,7 @@ export function SuperAdminPanel({
                             ))}
                           </div>
                         ) : (
-                          <p className="muted text-xs italic mt-1.5">Aucun restaurant assigné</p>
+                          <p className="muted text-xs italic mt-1.5">{t.superAdmin.noManagerAssigned}</p>
                         )}
                       </div>
                     </div>
@@ -918,25 +947,18 @@ export function SuperAdminPanel({
                         className="btn btn-ghost text-xs py-2 px-3"
                         onClick={() => openResetModal("user", u.id, u.name, u.email)}
                       >
-                        Reset MDP
+                        {t.superAdmin.resetManagerPassword}
                       </button>
                       <button
                         type="button"
                         disabled={isCurrent || u.isSuperAdmin}
-                        title={
-                          isCurrent
-                            ? "Vous ne pouvez pas supprimer votre propre compte"
-                            : u.isSuperAdmin
-                            ? "Compte Super Admin protégé"
-                            : "Supprimer cet utilisateur"
-                        }
                         className="btn btn-ghost text-xs py-2 px-3 text-red-600 hover:text-red-700 hover:border-red-300 disabled:opacity-40 disabled:cursor-not-allowed"
                         onClick={() => {
                           setModalError("");
                           setDeleteUserModal(u);
                         }}
                       >
-                        Supprimer
+                        {t.common.delete}
                       </button>
                     </div>
                   </div>
@@ -953,7 +975,7 @@ export function SuperAdminPanel({
           <div className="card relative max-h-[90vh] w-full max-w-md space-y-4 shadow-2xl border border-[var(--line)] bg-[var(--card)] p-6 rounded-2xl overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[var(--line)] pb-3">
               <div>
-                <h3 className="text-lg font-bold">Réinitialiser le mot de passe</h3>
+                <h3 className="text-lg font-bold">{t.superAdmin.resetPasswordModalTitle}</h3>
                 <p className="muted text-xs mt-0.5">
                   {resetModal.title} · {resetModal.email}
                 </p>
@@ -983,17 +1005,17 @@ export function SuperAdminPanel({
                   }}
                 >
                   <div className="font-semibold text-emerald-800 flex items-center gap-2">
-                    <span>✓</span> Mot de passe réinitialisé avec succès !
+                    <span>✓</span> {t.superAdmin.resetSuccessTitle}
                   </div>
                   <p className="text-xs text-stone-600">
-                    Le compte sera invité à changer ce mot de passe à sa prochaine connexion.
+                    {t.superAdmin.resetSuccessDesc}
                   </p>
                   <div
                     className="mt-2 rounded-xl bg-white/80 p-3 text-xs space-y-1 border border-[var(--line)]"
                     style={{ fontFamily: "var(--font-mono)" }}
                   >
-                    <div><strong>Identifiant :</strong> {resetSuccessCred.email}</div>
-                    <div><strong>Mot de passe provisoire :</strong> {resetSuccessCred.password}</div>
+                    <div><strong>Email :</strong> {resetSuccessCred.email}</div>
+                    <div><strong>{t.superAdmin.provisionalPassword} :</strong> {resetSuccessCred.password}</div>
                   </div>
                 </div>
 
@@ -1002,39 +1024,39 @@ export function SuperAdminPanel({
                     type="button"
                     onClick={() =>
                       copyToClipboard(
-                        `Email: ${resetSuccessCred.email}\nNouveau mot de passe provisoire: ${resetSuccessCred.password}`
+                        `Email: ${resetSuccessCred.email}\n${t.superAdmin.provisionalPassword}: ${resetSuccessCred.password}`
                       )
                     }
                     className="btn w-full text-xs py-2.5"
                   >
-                    {copied ? "✓ Identifiants copiés dans le presse-papier !" : "Copier les identifiants"}
+                    {copied ? `✓ ${t.common.copied}` : t.common.copy}
                   </button>
                   <button
                     type="button"
                     onClick={() => setResetModal(null)}
                     className="btn btn-ghost w-full text-xs py-2"
                   >
-                    Fermer
+                    {t.common.close}
                   </button>
                 </div>
               </div>
             ) : (
               <form onSubmit={handleResetPassword} className="space-y-4">
                 <p className="text-xs text-stone-600">
-                  Définissez un mot de passe provisoire pour <strong>{resetModal.email}</strong>. L&apos;utilisateur devra le modifier dès sa première connexion.
+                  {t.superAdmin.resetPasswordModalSubtitle}
                 </p>
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="label mb-0 text-xs font-semibold" htmlFor="customModalPassword">
-                      Mot de passe provisoire
+                      {t.superAdmin.provisionalPassword}
                     </label>
                     <button
                       type="button"
                       className="text-xs font-semibold underline text-[var(--brand)] hover:opacity-80"
                       onClick={() => setCustomPassword(suggestPassword())}
                     >
-                      Générer un autre
+                      {t.superAdmin.generatePassword}
                     </button>
                   </div>
                   <input
@@ -1056,14 +1078,14 @@ export function SuperAdminPanel({
                     className="btn btn-ghost text-xs py-2 px-3"
                     disabled={modalLoading}
                   >
-                    Annuler
+                    {t.common.cancel}
                   </button>
                   <button
                     type="submit"
                     className="btn text-xs py-2 px-4"
                     disabled={modalLoading}
                   >
-                    {modalLoading ? "Réinitialisation..." : "Confirmer le reset"}
+                    {modalLoading ? t.common.loading : t.superAdmin.confirmResetButton}
                   </button>
                 </div>
               </form>
@@ -1078,7 +1100,7 @@ export function SuperAdminPanel({
           <div className="card relative max-h-[90vh] w-full max-w-md space-y-4 shadow-2xl border border-[var(--line)] bg-[var(--card)] p-6 rounded-2xl overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[var(--line)] pb-3">
               <div>
-                <h3 className="text-lg font-bold text-red-700">Supprimer le restaurant</h3>
+                <h3 className="text-lg font-bold text-red-700">{t.superAdmin.deleteModalTitle}</h3>
                 <p className="muted text-xs mt-0.5">{deleteOrgModal.name}</p>
               </div>
               <button
@@ -1097,15 +1119,14 @@ export function SuperAdminPanel({
             ) : null}
 
             <p className="text-sm">
-              Êtes-vous sûr de vouloir supprimer définitivement le restaurant{" "}
-              <strong>« {deleteOrgModal.name} »</strong> ({deleteOrgModal.slug}) ?
+              {t.superAdmin.deleteRestaurant} : <strong>« {deleteOrgModal.name} »</strong> ({deleteOrgModal.slug})
             </p>
 
             <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-900 space-y-1.5">
-              <div className="font-semibold">Attention : Cette action est irréversible !</div>
+              <div className="font-semibold">{t.superAdmin.deleteModalWarning}</div>
               <ul className="list-disc pl-4 space-y-1 text-red-800">
-                <li>Tous les plats ({deleteOrgModal.counts.items}), tables ({deleteOrgModal.counts.tables}) et commandes ({deleteOrgModal.counts.orders}) seront définitivement effacés.</li>
-                <li><strong>Le compte du gérant restera intact</strong> dans le système et peut être réutilisé pour créer un nouveau restaurant ou géré dans l&apos;onglet « Utilisateurs ».</li>
+                <li>{t.superAdmin.deleteOrgWarningItems}</li>
+                <li><strong>{t.superAdmin.deleteOrgKeepManager}</strong></li>
               </ul>
             </div>
 
@@ -1116,7 +1137,7 @@ export function SuperAdminPanel({
                 className="btn btn-ghost text-xs py-2 px-3"
                 disabled={modalLoading}
               >
-                Annuler
+                {t.common.cancel}
               </button>
               <button
                 type="button"
@@ -1124,7 +1145,7 @@ export function SuperAdminPanel({
                 disabled={modalLoading}
                 className="btn text-xs py-2 px-4 bg-red-600 hover:bg-red-700 text-white"
               >
-                {modalLoading ? "Suppression en cours..." : "Supprimer définitivement le restaurant"}
+                {modalLoading ? t.common.loading : t.superAdmin.confirmDeleteButton}
               </button>
             </div>
           </div>
@@ -1137,7 +1158,7 @@ export function SuperAdminPanel({
           <div className="card relative max-h-[90vh] w-full max-w-md space-y-4 shadow-2xl border border-[var(--line)] bg-[var(--card)] p-6 rounded-2xl overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[var(--line)] pb-3">
               <div>
-                <h3 className="text-lg font-bold text-red-700">Supprimer l&apos;utilisateur</h3>
+                <h3 className="text-lg font-bold text-red-700">{t.superAdmin.deleteUserModalTitle}</h3>
                 <p className="muted text-xs mt-0.5">
                   {deleteUserModal.name} · {deleteUserModal.email}
                 </p>
@@ -1158,20 +1179,13 @@ export function SuperAdminPanel({
             ) : null}
 
             <p className="text-sm">
-              Êtes-vous sûr de vouloir supprimer définitivement le compte utilisateur de{" "}
-              <strong>« {deleteUserModal.name} »</strong> ({deleteUserModal.email}) ?
+              {t.superAdmin.deleteUserModalTitle} : <strong>« {deleteUserModal.name} »</strong> ({deleteUserModal.email})
             </p>
 
             <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-900 space-y-1.5">
-              <div className="font-semibold">Conséquences de la suppression :</div>
+              <div className="font-semibold">{t.superAdmin.deleteModalWarning}</div>
               <ul className="list-disc pl-4 space-y-1 text-red-800">
-                <li>L&apos;utilisateur ne pourra plus se connecter à la plateforme.</li>
-                <li>L&apos;adresse email sera libérée et pourra être réutilisée.</li>
-                <li>
-                  {deleteUserModal.memberships.length > 0
-                    ? `Les restaurants gérés (${deleteUserModal.memberships.map((m) => m.organization.name).join(", ")}) resteront intacts mais n'auront plus de gérant assigné.`
-                    : "Cet utilisateur n'est actuellement assigné à aucun restaurant."}
-                </li>
+                <li>{t.superAdmin.deleteUserWarningItems}</li>
               </ul>
             </div>
 
@@ -1182,7 +1196,7 @@ export function SuperAdminPanel({
                 className="btn btn-ghost text-xs py-2 px-3"
                 disabled={modalLoading}
               >
-                Annuler
+                {t.common.cancel}
               </button>
               <button
                 type="button"
@@ -1190,7 +1204,7 @@ export function SuperAdminPanel({
                 disabled={modalLoading}
                 className="btn text-xs py-2 px-4 bg-red-600 hover:bg-red-700 text-white"
               >
-                {modalLoading ? "Suppression en cours..." : "Supprimer définitivement l'utilisateur"}
+                {modalLoading ? t.common.loading : t.superAdmin.confirmDeleteButton}
               </button>
             </div>
           </div>
@@ -1203,7 +1217,7 @@ export function SuperAdminPanel({
           <div className="card relative max-h-[90vh] w-full max-w-md space-y-4 shadow-2xl border border-[var(--line)] bg-[var(--card)] p-6 rounded-2xl overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[var(--line)] pb-3">
               <div>
-                <h3 className="text-lg font-bold text-red-700">Supprimer le Vendeur</h3>
+                <h3 className="text-lg font-bold text-red-700">{t.superAdmin.deleteVendeurModalTitle}</h3>
                 <p className="muted text-xs mt-0.5">
                   {deleteVendeurModal.name} · {deleteVendeurModal.email}
                 </p>
@@ -1224,15 +1238,13 @@ export function SuperAdminPanel({
             ) : null}
 
             <p className="text-sm">
-              Êtes-vous sûr de vouloir supprimer le compte du vendeur{" "}
-              <strong>« {deleteVendeurModal.name} »</strong> ({deleteVendeurModal.email}) ?
+              {t.superAdmin.deleteVendeurModalTitle} : <strong>« {deleteVendeurModal.name} »</strong> ({deleteVendeurModal.email})
             </p>
 
             <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs text-stone-800 space-y-1.5">
-              <div className="font-semibold">Conséquences :</div>
+              <div className="font-semibold">{t.superAdmin.deleteModalWarning}</div>
               <ul className="list-disc pl-4 space-y-1 text-stone-700">
-                <li>Le vendeur ne pourra plus se connecter au portail vendeur.</li>
-                <li><strong>Tous les restaurants créés par ce vendeur seront conservés</strong> et rattachés directement à la plateforme.</li>
+                <li>{t.superAdmin.deleteVendeurWarning}</li>
               </ul>
             </div>
 
@@ -1243,7 +1255,7 @@ export function SuperAdminPanel({
                 className="btn btn-ghost text-xs py-2 px-3"
                 disabled={modalLoading}
               >
-                Annuler
+                {t.common.cancel}
               </button>
               <button
                 type="button"
@@ -1251,7 +1263,7 @@ export function SuperAdminPanel({
                 disabled={modalLoading}
                 className="btn text-xs py-2 px-4 bg-red-600 hover:bg-red-700 text-white"
               >
-                {modalLoading ? "Suppression en cours..." : "Supprimer le vendeur"}
+                {modalLoading ? t.common.loading : t.superAdmin.confirmDeleteButton}
               </button>
             </div>
           </div>

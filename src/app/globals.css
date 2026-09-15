@@ -189,10 +189,19 @@ textarea {
   .no-print {
     display: none !important;
   }
+}
 
-  * {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
+/* RTL & Arabic typography */
+html[dir="rtl"], [dir="rtl"] {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Arabic", "Cairo", Arial, sans-serif;
+  text-align: right;
+}
+
+[dir="rtl"] .text-left {
+  text-align: right;
+}
+
+[dir="rtl"] .text-right {
+  text-align: left;
 }
 

@@ -78,6 +78,8 @@ export default async function OrgDashboardPage({ params, searchParams }: Props) 
       orgName={organization.name}
       slug={organization.slug}
       role={role}
+      isPlatformAdmin={user.isSuperAdmin}
+      isVendeur={Boolean(isVendeurOwner)}
       canCustomize={canCustomize}
       initialCategories={categories}
       initialTables={tables}

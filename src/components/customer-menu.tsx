@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { formatMoney } from "@/lib/utils";
 import { brandingStyle, displayBrandName, normalizeBranding } from "@/lib/branding";
 import { MenuBook } from "@/components/menu-book";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 type MenuItem = {
   id: string;
@@ -36,6 +38,7 @@ export function CustomerMenu({
   categories: Category[];
   branding?: Parameters<typeof normalizeBranding>[0];
 }) {
+  const { t, isRtl, dir } = useI18n();
   const branding = normalizeBranding(brandingProp);
   const title = displayBrandName(restaurantName, branding.brandName);
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -102,7 +105,7 @@ export function CustomerMenu({
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      setError(data.error || "Erreur");
+      setError(data.error || t.customerMenu.orderError);
       setStatus("error");
       setConfirmOpen(false);
       return;
@@ -115,24 +118,33 @@ export function CustomerMenu({
 
   useEffect(() => {
     if (status !== "done") return;
-    const t = setTimeout(() => setStatus("idle"), 3500);
-    return () => clearTimeout(t);
+    const tTimer = setTimeout(() => setStatus("idle"), 3500);
+    return () => clearTimeout(tTimer);
   }, [status]);
 
   // Espace bas selon panier ouvert (détail auto) ou réduit
   const bottomPad =
     cart.length === 0 ? "pb-10" : cartMinimized ? "pb-28" : "pb-[min(52vh,28rem)]";
 
+  const displayTable = tableName.toLowerCase().startsWith("table")
+    ? `${t.customerMenu.table} ${tableName.replace(/^Table\s*/i, "")}`
+    : tableName;
+
   return (
     <main
-      className={`mx-auto min-h-screen w-full max-w-lg px-4 pt-0 ${bottomPad}`}
+      dir={dir}
+      className={`mx-auto min-h-screen w-full max-w-lg px-4 pt-0 ${bottomPad} ${isRtl ? "rtl" : ""}`}
       style={themeStyle}
     >
       {branding.menuFormat === "book" ? (
         <div className="py-2">
+          <div className="mb-3 flex items-center justify-between gap-2 px-1">
+            <span className="text-xs uppercase tracking-[0.16em] opacity-60">{displayTable}</span>
+            <LanguageSwitcher variant="segmented" />
+          </div>
           <MenuBook
             title={title}
-            tableName={tableName}
+            tableName={displayTable}
             categories={categories}
             branding={branding}
             onAddItem={addItem}
@@ -151,23 +163,26 @@ export function CustomerMenu({
             <div className="h-4" />
           )}
           <header className="mb-6">
-            <div className="mb-3 flex items-center gap-3">
-              {branding.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={branding.logoUrl}
-                  alt={title}
-                  className="h-14 w-14 object-cover"
-                  style={{ borderRadius: radius }}
-                />
-              ) : null}
-              <div>
-                <p className="text-sm uppercase tracking-[0.18em] opacity-60">{tableName}</p>
-                <h1 className="text-3xl font-semibold">{title}</h1>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                {branding.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={branding.logoUrl}
+                    alt={title}
+                    className="h-14 w-14 object-cover"
+                    style={{ borderRadius: radius }}
+                  />
+                ) : null}
+                <div>
+                  <p className="text-sm uppercase tracking-[0.18em] opacity-60">{displayTable}</p>
+                  <h1 className="text-3xl font-semibold">{title}</h1>
+                </div>
               </div>
+              <LanguageSwitcher variant="segmented" />
             </div>
             <p className="text-sm opacity-70" style={{ fontFamily: "var(--font-mono)" }}>
-              Commande à table via QR
+              {t.customerMenu.orderViaQr}
             </p>
           </header>
 
@@ -184,6 +199,9 @@ export function CustomerMenu({
             {categories.map((cat) => (
               <section key={cat.id}>
                 <h2 className="mb-3 text-2xl font-semibold">{cat.name}</h2>
+                {cat.items.length === 0 ? (
+                  <p className="text-sm opacity-50 py-2">{t.customerMenu.emptyCategory}</p>
+                ) : null}
                 <div className="space-y-3">
                   {cat.items.map((item) => (
                     <button
@@ -244,9 +262,10 @@ export function CustomerMenu({
         </div>
       ) : null}
 
-      {/* Panier bas : détail auto dès qu’on ajoute un plat */}
+      {/* Panier bas */}
       {cart.length > 0 ? (
         <div
+          dir={dir}
           className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3"
           style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom, 0px))" }}
         >
@@ -268,9 +287,9 @@ export function CustomerMenu({
                   {itemCount}
                 </span>
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold">Ma commande</div>
+                  <div className="text-sm font-semibold">{t.customerMenu.myOrder}</div>
                   <div className="truncate text-xs opacity-55" style={{ fontFamily: "var(--font-mono)" }}>
-                    {itemCount} article{itemCount > 1 ? "s" : ""} · {formatMoney(total)}
+                    {itemCount} {t.customerMenu.itemsCount} · {formatMoney(total)}
                   </div>
                 </div>
               </div>
@@ -280,7 +299,7 @@ export function CustomerMenu({
                 style={{ borderColor: `${branding.primaryColor}40` }}
                 onClick={() => setCartMinimized((v) => !v)}
               >
-                {cartMinimized ? "Voir" : "Réduire"}
+                {cartMinimized ? t.customerMenu.expandCart : t.customerMenu.minimizeCart}
               </button>
             </div>
 
@@ -326,13 +345,13 @@ export function CustomerMenu({
                 <input
                   className="mt-2 w-full border bg-white px-3 py-2 text-sm"
                   style={{ borderRadius: radius, borderColor: `${branding.primaryColor}28` }}
-                  placeholder="Note cuisine (optionnel)"
+                  placeholder={t.customerMenu.specialNotePlaceholder}
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                 />
 
                 <div className="mt-2 flex items-center justify-between text-sm font-semibold">
-                  <span>Total</span>
+                  <span>{t.customerMenu.total}</span>
                   <span style={{ color: branding.primaryColor }}>{formatMoney(total)}</span>
                 </div>
 
@@ -342,7 +361,7 @@ export function CustomerMenu({
                   style={{ background: branding.primaryColor }}
                   onClick={() => setConfirmOpen(true)}
                 >
-                  Commander · {formatMoney(total)}
+                  {t.customerMenu.confirmOrder} · {formatMoney(total)}
                 </button>
               </div>
             ) : (
@@ -353,7 +372,7 @@ export function CustomerMenu({
                   style={{ background: branding.primaryColor }}
                   onClick={() => setConfirmOpen(true)}
                 >
-                  Commander · {formatMoney(total)}
+                  {t.customerMenu.confirmOrder} · {formatMoney(total)}
                 </button>
               </div>
             )}
@@ -361,8 +380,10 @@ export function CustomerMenu({
         </div>
       ) : null}
 
+      {/* Modal confirmation */}
       {confirmOpen ? (
         <div
+          dir={dir}
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center"
           onClick={() => status !== "sending" && setConfirmOpen(false)}
         >
@@ -371,10 +392,12 @@ export function CustomerMenu({
             style={{ borderRadius: "1.5rem", borderColor: `${branding.primaryColor}33` }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-1 text-xs uppercase tracking-[0.16em] opacity-50">Confirmation</div>
-            <h2 className="text-2xl font-semibold">Valider la commande ?</h2>
+            <div className="mb-1 text-xs uppercase tracking-[0.16em] opacity-50">
+              {t.customerMenu.confirmOrderTitle}
+            </div>
+            <h2 className="text-2xl font-semibold">{t.customerMenu.confirmOrder} ?</h2>
             <p className="mt-1 text-sm opacity-70" style={{ fontFamily: "var(--font-mono)" }}>
-              {tableName} · {title}
+              {displayTable} · {title}
             </p>
 
             <ul className="mt-4 max-h-48 space-y-2 overflow-auto">
@@ -396,7 +419,7 @@ export function CustomerMenu({
 
             {note.trim() ? (
               <p className="mt-3 rounded-xl bg-white/80 px-3 py-2 text-sm opacity-80">
-                Note : {note}
+                {t.customerMenu.specialNote} : {note}
               </p>
             ) : null}
 
@@ -404,7 +427,7 @@ export function CustomerMenu({
               className="mt-4 flex items-center justify-between border-t pt-3 text-base font-semibold"
               style={{ borderColor: `${branding.primaryColor}22` }}
             >
-              <span>Total</span>
+              <span>{t.customerMenu.total}</span>
               <span style={{ color: branding.primaryColor }}>{formatMoney(total)}</span>
             </div>
 
@@ -419,7 +442,7 @@ export function CustomerMenu({
                   setCartMinimized(false);
                 }}
               >
-                Modifier
+                {t.common.cancel}
               </button>
               <button
                 type="button"
@@ -428,15 +451,16 @@ export function CustomerMenu({
                 disabled={status === "sending"}
                 onClick={() => void submitConfirmed()}
               >
-                {status === "sending" ? "Envoi..." : "Confirmer"}
+                {status === "sending" ? t.customerMenu.sendingOrder : t.common.confirm}
               </button>
             </div>
           </div>
         </div>
       ) : null}
 
+      {/* Modal succès */}
       {status === "done" ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div dir={dir} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div
             className="w-full max-w-sm border bg-[#fffdf8] p-6 text-center shadow-2xl"
             style={{ borderRadius: "1.5rem", borderColor: "var(--ok)" }}
@@ -447,12 +471,12 @@ export function CustomerMenu({
             >
               ✓
             </div>
-            <h2 className="text-2xl font-semibold">Commande envoyée !</h2>
+            <h2 className="text-2xl font-semibold">{t.customerMenu.orderSent}</h2>
             <p className="mt-2 text-sm opacity-70" style={{ fontFamily: "var(--font-mono)" }}>
-              La cuisine a bien reçu ta commande pour {tableName}.
+              {t.customerMenu.orderSentDesc} ({displayTable})
             </p>
             <button type="button" className="btn mt-5 w-full" onClick={() => setStatus("idle")}>
-              Continuer
+              {t.common.close}
             </button>
           </div>
         </div>

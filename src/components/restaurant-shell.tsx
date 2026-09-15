@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { ReactNode } from "react";
 import { Branding, brandingStyle, displayBrandName } from "@/lib/branding";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 export type RestaurantNavId = "admin" | "menu" | "tables" | "kitchen" | "settings";
 
@@ -35,10 +37,11 @@ export function RestaurantShell({
   onNavigate,
   children,
 }: Props) {
+  const { t, isRtl, dir } = useI18n();
   const title = displayBrandName(orgName, branding.brandName);
 
   function itemClass(id: RestaurantNavId) {
-    return `block w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${
+    return `block w-full rounded-xl px-3 py-2.5 text-left rtl:text-right text-sm font-semibold transition ${
       active === id ? "text-white" : ""
     }`;
   }
@@ -47,8 +50,14 @@ export function RestaurantShell({
     return active === id ? { background: "var(--brand)" } : undefined;
   }
 
+  const navItems: [RestaurantNavId, string][] = [
+    ["admin", t.nav.space],
+    ["menu", t.nav.menu],
+    ["tables", t.nav.tablesAndQr],
+  ];
+
   return (
-    <div style={brandingStyle(branding)}>
+    <div style={brandingStyle(branding)} dir={dir} className={isRtl ? "rtl" : ""}>
       <div className="mx-auto flex min-h-screen w-full max-w-6xl gap-5 px-4 py-6 md:gap-6 md:px-6">
         <aside className="flex w-40 shrink-0 flex-col gap-3 sm:w-48 md:w-52">
           <div className="card !p-3">
@@ -73,13 +82,7 @@ export function RestaurantShell({
             </div>
 
             <nav className="flex flex-col gap-1">
-              {(
-                [
-                  ["admin", "Espace"],
-                  ["menu", "Menu"],
-                  ["tables", "Tables & QR"],
-                ] as const
-              ).map(([id, label]) =>
+              {navItems.map(([id, label]) =>
                 onNavigate ? (
                   <button
                     key={id}
@@ -107,9 +110,9 @@ export function RestaurantShell({
                 className={itemClass("kitchen")}
                 style={itemStyle("kitchen")}
               >
-                Commandes
+                {t.nav.orders}
                 {pendingOrders > 0 ? (
-                  <span className="ml-1 rounded-full bg-white/25 px-1.5 text-xs">
+                  <span className="mx-1 rounded-full bg-white/25 px-1.5 text-xs">
                     {pendingOrders}
                   </span>
                 ) : null}
@@ -117,7 +120,7 @@ export function RestaurantShell({
             </nav>
           </div>
 
-          {/* Settings — bouton séparé à gauche */}
+          {/* Settings button */}
           <div
             className="overflow-hidden rounded-2xl border bg-[var(--card)] shadow-sm"
             style={{ borderColor: "var(--line)" }}
@@ -134,13 +137,13 @@ export function RestaurantShell({
                 }}
                 onClick={() => onNavigate("settings")}
               >
-                ⚙ Settings
+                ⚙ {t.nav.settings}
                 <span
                   className={`mt-0.5 block text-[11px] font-normal ${
                     active === "settings" ? "text-white/80" : "opacity-70"
                   }`}
                 >
-                  Logo · couleurs · site
+                  {t.nav.settingsSubtitle}
                 </span>
               </button>
             ) : (
@@ -149,13 +152,13 @@ export function RestaurantShell({
                 className={itemClass("settings")}
                 style={{ ...itemStyle("settings"), borderRadius: 0 }}
               >
-                ⚙ Settings
+                ⚙ {t.nav.settings}
                 <span
                   className={`mt-0.5 block text-[11px] font-normal ${
                     active === "settings" ? "text-white/80" : "opacity-70"
                   }`}
                 >
-                  Logo · couleurs · site
+                  {t.nav.settingsSubtitle}
                 </span>
               </Link>
             )}
@@ -167,15 +170,18 @@ export function RestaurantShell({
             <div>
               {backHref && backLabel ? (
                 <Link href={backHref} className="muted text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-                  ← {backLabel}
+                  {isRtl ? `${backLabel} →` : `← ${backLabel}`}
                 </Link>
               ) : null}
               <h1 className="text-3xl font-semibold">{title}</h1>
               <p className="muted" style={{ fontFamily: "var(--font-mono)" }}>
-                {roleLabel} · {pendingOrders} cmd actives · DH
+                {roleLabel} · {pendingOrders} {t.nav.activeOrders} · {t.common.currency}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">{headerActions}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <LanguageSwitcher variant="dropdown" />
+              {headerActions}
+            </div>
           </header>
           {children}
         </div>

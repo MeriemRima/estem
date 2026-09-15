@@ -1,12 +1,8 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getMembership, getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { KitchenBoard } from "@/components/kitchen-board";
-import { LogoutButton } from "@/components/logout-button";
-import { RestaurantShell } from "@/components/restaurant-shell";
 import { normalizeBranding } from "@/lib/branding";
-import { PLATFORM_ROLE_LABEL, roleLabel } from "@/lib/roles";
+import { KitchenView } from "@/components/kitchen-view";
 
 type Props = { params: Promise<{ orgId: string }> };
 
@@ -46,39 +42,20 @@ export default async function KitchenPage({ params }: Props) {
   ]);
 
   const branding = normalizeBranding(organization);
-  const displayRole = roleLabel(membership?.role ?? "OWNER", user.isSuperAdmin, isVendeurOwner);
+  const role = membership?.role ?? "OWNER";
 
   return (
-    <RestaurantShell
+    <KitchenView
       orgId={orgId}
       orgName={organization.name}
       branding={branding}
-      active="kitchen"
-      backHref={`/dashboard/${orgId}`}
-      backLabel="Gestion resto"
-      roleLabel={displayRole}
       slug={organization.slug}
+      role={role}
+      isPlatformAdmin={user.isSuperAdmin}
+      isVendeur={Boolean(user.isVendeur)}
+      initialOrders={orders}
       pendingOrders={pendingOrders}
-      headerActions={
-        <>
-          {user.isSuperAdmin ? (
-            <Link href="/super-admin" className="btn btn-ghost">
-              {PLATFORM_ROLE_LABEL}
-            </Link>
-          ) : user.isVendeur ? (
-            <Link href="/vendeur" className="btn btn-ghost">
-              Espace Vendeur
-            </Link>
-          ) : null}
-          <LogoutButton />
-        </>
-      }
-    >
-      <KitchenBoard
-        orgId={orgId}
-        initialOrders={orders}
-        restaurantName={organization.name}
-      />
-    </RestaurantShell>
+    />
   );
 }
+
