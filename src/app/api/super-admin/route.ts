@@ -5,10 +5,13 @@ import { requireSuperAdmin } from "@/lib/auth";
 export async function GET() {
   try {
     await requireSuperAdmin();
-    const [organizations, usersCount, ordersCount, usersList] = await Promise.all([
+    const [organizations, usersCount, ordersCount, usersList, vendeurs] = await Promise.all([
       prisma.organization.findMany({
         orderBy: { createdAt: "desc" },
         include: {
+          vendeur: {
+            select: { id: true, name: true, email: true },
+          },
           _count: {
             select: {
               memberships: true,
@@ -60,6 +63,18 @@ export async function GET() {
           },
         },
       }),
+      prisma.user.findMany({
+        where: { isVendeur: true },
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mustChangePassword: true,
+          createdAt: true,
+          _count: { select: { vendeurOrganizations: true } },
+        },
+      }),
     ]);
 
     return NextResponse.json({
@@ -67,7 +82,9 @@ export async function GET() {
         restaurants: organizations.length,
         users: usersCount,
         activeOrders: ordersCount,
+        vendeursCount: vendeurs.length,
       },
+      vendeurs,
       organizations: organizations.map((o) => {
         const owner = o.memberships[0]?.user ?? null;
         return {
@@ -75,6 +92,8 @@ export async function GET() {
           name: o.name,
           slug: o.slug,
           createdAt: o.createdAt.toISOString(),
+          vendeurId: o.vendeurId,
+          vendeur: o.vendeur,
           _count: o._count,
           owner,
         };

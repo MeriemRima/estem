@@ -16,10 +16,13 @@ export default async function SuperAdminPage() {
   });
   if (dbUser?.mustChangePassword) redirect("/account/password");
 
-  const [organizations, userCount, activeOrders, allUsers] = await Promise.all([
+  const [organizations, userCount, activeOrders, allUsers, vendeurs] = await Promise.all([
     prisma.organization.findMany({
       orderBy: { createdAt: "desc" },
       include: {
+        vendeur: {
+          select: { id: true, name: true, email: true },
+        },
         _count: {
           select: { memberships: true, items: true, tables: true, orders: true },
         },
@@ -66,6 +69,18 @@ export default async function SuperAdminPage() {
         },
       },
     }),
+    prisma.user.findMany({
+      where: { isVendeur: true },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        mustChangePassword: true,
+        createdAt: true,
+        _count: { select: { vendeurOrganizations: true } },
+      },
+    }),
   ]);
 
   return (
@@ -76,8 +91,7 @@ export default async function SuperAdminPage() {
             <p className="muted text-sm uppercase tracking-[0.22em]">Plateforme Estem</p>
             <h1 className="mt-1 text-4xl font-semibold tracking-tight">{PLATFORM_ROLE_LABEL}</h1>
             <p className="muted mt-2 max-w-xl text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-              Crée les restaurants, assigne les gérants, suis l&apos;ownership. Les gérants
-              n&apos;entrent que dans leur propre espace.
+              Gestion globale de la plateforme, création des Account Managers (Vendeurs) et suivi des restaurants.
             </p>
             <p className="muted mt-3 text-xs" style={{ fontFamily: "var(--font-mono)" }}>
               Connecté · {session.email}
@@ -94,6 +108,8 @@ export default async function SuperAdminPage() {
           name: o.name,
           slug: o.slug,
           createdAt: o.createdAt.toISOString(),
+          vendeurId: o.vendeurId,
+          vendeur: o.vendeur,
           counts: o._count,
           owner: o.memberships[0]?.user ?? null,
         }))}
@@ -106,11 +122,16 @@ export default async function SuperAdminPage() {
           createdAt: u.createdAt.toISOString(),
           memberships: u.memberships,
         }))}
+        initialVendeurs={vendeurs.map((v) => ({
+          ...v,
+          createdAt: v.createdAt.toISOString(),
+        }))}
         currentUserId={session.id}
         initialStats={{
           restaurants: organizations.length,
           users: userCount,
           activeOrders,
+          vendeursCount: vendeurs.length,
         }}
       />
     </main>

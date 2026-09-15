@@ -21,10 +21,13 @@ export default async function KitchenPage({ params }: Props) {
   });
   if (dbUser?.mustChangePassword) redirect("/account/password");
 
-  const membership = await getMembership(user.id, orgId);
-  if (!membership && !user.isSuperAdmin) notFound();
+  const organization = await prisma.organization.findUnique({ where: { id: orgId } });
+  if (!organization) notFound();
 
-  const organization = await prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
+  const isVendeurOwner = user.isVendeur && organization.vendeurId === user.id;
+  const membership = await getMembership(user.id, orgId);
+
+  if (!membership && !user.isSuperAdmin && !isVendeurOwner) notFound();
   const [orders, pendingOrders] = await Promise.all([
     prisma.order.findMany({
       where: {
@@ -43,7 +46,7 @@ export default async function KitchenPage({ params }: Props) {
   ]);
 
   const branding = normalizeBranding(organization);
-  const displayRole = roleLabel(membership?.role ?? "OWNER", user.isSuperAdmin);
+  const displayRole = roleLabel(membership?.role ?? "OWNER", user.isSuperAdmin, isVendeurOwner);
 
   return (
     <RestaurantShell
@@ -61,6 +64,10 @@ export default async function KitchenPage({ params }: Props) {
           {user.isSuperAdmin ? (
             <Link href="/super-admin" className="btn btn-ghost">
               {PLATFORM_ROLE_LABEL}
+            </Link>
+          ) : user.isVendeur ? (
+            <Link href="/vendeur" className="btn btn-ghost">
+              Espace Vendeur
             </Link>
           ) : null}
           <LogoutButton />

@@ -11,11 +11,24 @@ type Owner = {
   mustChangePassword: boolean;
 } | null;
 
+type Vendeur = {
+  id: string;
+  name: string;
+  email: string;
+  mustChangePassword: boolean;
+  createdAt: string;
+  _count: {
+    vendeurOrganizations: number;
+  };
+};
+
 type OrgRow = {
   id: string;
   name: string;
   slug: string;
   createdAt: string;
+  vendeurId?: string | null;
+  vendeur?: { id: string; name: string; email: string } | null;
   counts: {
     memberships: number;
     items: number;
@@ -39,6 +52,7 @@ type UserRow = {
   name: string;
   email: string;
   isSuperAdmin: boolean;
+  isVendeur?: boolean;
   mustChangePassword: boolean;
   createdAt: string;
   memberships: UserMembership[];
@@ -48,6 +62,7 @@ type Stats = {
   restaurants: number;
   users: number;
   activeOrders: number;
+  vendeursCount?: number;
 };
 
 function suggestPassword() {
@@ -62,24 +77,38 @@ export function SuperAdminPanel({
   initialUsers = [],
   currentUserId,
   initialStats,
+  initialVendeurs = [],
 }: {
   initialOrgs: OrgRow[];
   initialUsers?: UserRow[];
   currentUserId?: string;
   initialStats: Stats;
+  initialVendeurs?: Vendeur[];
 }) {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"restaurants" | "vendeurs" | "users">("restaurants");
+
   const [orgs, setOrgs] = useState<OrgRow[]>(initialOrgs);
   const [users, setUsers] = useState<UserRow[]>(initialUsers);
+  const [vendeurs, setVendeurs] = useState<Vendeur[]>(initialVendeurs);
   const [stats, setStats] = useState<Stats>(initialStats);
-  const [activeTab, setActiveTab] = useState<"restaurants" | "users">("restaurants");
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [userQuery, setUserQuery] = useState("");
-  const [provisionalPassword, setProvisionalPassword] = useState(suggestPassword);
+  const [vendeurQuery, setVendeurQuery] = useState("");
 
+  // Vendeur creation state
+  const [vendeurPassword, setVendeurPassword] = useState(suggestPassword);
+  const [createdVendeurCred, setCreatedVendeurCred] = useState<{
+    name: string;
+    email: string;
+    password: string;
+  } | null>(null);
+
+  // Restaurant creation state
+  const [provisionalPassword, setProvisionalPassword] = useState(suggestPassword);
   const [createdCred, setCreatedCred] = useState<{
     restaurant: string;
     email: string;
@@ -89,7 +118,7 @@ export function SuperAdminPanel({
 
   // Modal states
   const [resetModal, setResetModal] = useState<{
-    targetType: "org" | "user";
+    targetType: "org" | "user" | "vendeur";
     id: string;
     title: string;
     email: string;
@@ -104,6 +133,7 @@ export function SuperAdminPanel({
 
   const [deleteOrgModal, setDeleteOrgModal] = useState<OrgRow | null>(null);
   const [deleteUserModal, setDeleteUserModal] = useState<UserRow | null>(null);
+  const [deleteVendeurModal, setDeleteVendeurModal] = useState<Vendeur | null>(null);
 
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState("");
@@ -116,9 +146,21 @@ export function SuperAdminPanel({
         o.name.toLowerCase().includes(q) ||
         o.slug.toLowerCase().includes(q) ||
         o.owner?.email?.toLowerCase().includes(q) ||
-        o.owner?.name?.toLowerCase().includes(q),
+        o.owner?.name?.toLowerCase().includes(q) ||
+        o.vendeur?.name?.toLowerCase().includes(q) ||
+        o.vendeur?.email?.toLowerCase().includes(q),
     );
   }, [orgs, query]);
+
+  const filteredVendeurs = useMemo(() => {
+    const q = vendeurQuery.trim().toLowerCase();
+    if (!q) return vendeurs;
+    return vendeurs.filter(
+      (v) =>
+        v.name.toLowerCase().includes(q) ||
+        v.email.toLowerCase().includes(q),
+    );
+  }, [vendeurs, vendeurQuery]);
 
   const filteredUsers = useMemo(() => {
     const q = userQuery.trim().toLowerCase();
@@ -136,6 +178,7 @@ export function SuperAdminPanel({
     if (!res.ok) return;
     const data = await res.json();
     setStats(data.stats);
+    setVendeurs(data.vendeurs || []);
     setOrgs(
       data.organizations.map(
         (o: {
@@ -143,6 +186,8 @@ export function SuperAdminPanel({
           name: string;
           slug: string;
           createdAt: string;
+          vendeurId?: string | null;
+          vendeur?: { id: string; name: string; email: string } | null;
           _count: OrgRow["counts"];
           owner: Owner;
         }) => ({
@@ -150,6 +195,8 @@ export function SuperAdminPanel({
           name: o.name,
           slug: o.slug,
           createdAt: o.createdAt,
+          vendeurId: o.vendeurId,
+          vendeur: o.vendeur,
           counts: o._count,
           owner: o.owner,
         }),
@@ -157,6 +204,53 @@ export function SuperAdminPanel({
     );
     if (data.users) {
       setUsers(data.users);
+    }
+  }
+
+  async function copyToClipboard(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback
+    }
+  }
+
+  async function createVendeur(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setCreatedVendeurCred(null);
+    const formEl = e.currentTarget;
+    const form = new FormData(formEl);
+    const password = String(form.get("vendeurPassword") || vendeurPassword);
+
+    try {
+      const res = await fetch("/api/super-admin/vendeurs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.get("name"),
+          email: form.get("email"),
+          password,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Erreur lors de la création du vendeur");
+        return;
+      }
+      setCreatedVendeurCred({
+        name: data.vendeur.name,
+        email: data.vendeur.email,
+        password: data.provisionalPassword,
+      });
+      formEl.reset();
+      setVendeurPassword(suggestPassword());
+      await refresh();
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -200,7 +294,7 @@ export function SuperAdminPanel({
   }
 
   function openResetModal(
-    targetType: "org" | "user",
+    targetType: "org" | "user" | "vendeur",
     id: string,
     title: string,
     email: string,
@@ -218,15 +312,24 @@ export function SuperAdminPanel({
     setModalLoading(true);
     setModalError("");
     try {
-      const url =
-        resetModal.targetType === "org"
-          ? `/api/super-admin/restaurants/${resetModal.id}/reset-password`
-          : `/api/super-admin/users/${resetModal.id}/reset-password`;
+      let url = "";
+      let payload: Record<string, string> = {};
+
+      if (resetModal.targetType === "org") {
+        url = `/api/super-admin/restaurants/${resetModal.id}/reset-password`;
+        payload = { password: customPassword };
+      } else if (resetModal.targetType === "user") {
+        url = `/api/super-admin/users/${resetModal.id}/reset-password`;
+        payload = { password: customPassword };
+      } else {
+        url = `/api/super-admin/vendeurs/${resetModal.id}`;
+        payload = { newPassword: customPassword };
+      }
 
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: customPassword }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -235,7 +338,7 @@ export function SuperAdminPanel({
       }
       setResetSuccessCred({
         title: resetModal.title,
-        email: data.email,
+        email: data.email || resetModal.email,
         password: data.provisionalPassword,
       });
       await refresh();
@@ -243,16 +346,6 @@ export function SuperAdminPanel({
       setModalError("Une erreur réseau est survenue");
     } finally {
       setModalLoading(false);
-    }
-  }
-
-  async function copyToClipboard(text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback
     }
   }
 
@@ -300,13 +393,36 @@ export function SuperAdminPanel({
     }
   }
 
+  async function handleDeleteVendeur() {
+    if (!deleteVendeurModal) return;
+    setModalLoading(true);
+    setModalError("");
+    try {
+      const res = await fetch(`/api/super-admin/vendeurs/${deleteVendeurModal.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setModalError(data.error || "Suppression impossible");
+        return;
+      }
+      setDeleteVendeurModal(null);
+      await refresh();
+    } catch {
+      setModalError("Une erreur réseau est survenue");
+    } finally {
+      setModalLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
       {/* Platform Stats Cards */}
-      <section className="grid gap-3 sm:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
+          ["Account Managers (Vendeurs)", stats.vendeursCount ?? vendeurs.length, "Gestionnaires de portefeuille"],
           ["Restaurants", stats.restaurants, "Créés sur la plateforme"],
-          ["Comptes", stats.users, "Gérants & administrateurs"],
+          ["Comptes Globaux", stats.users, "Vendeurs, gérants & équipes"],
           ["Commandes live", stats.activeOrders, "En cours sur la plateforme"],
         ].map(([label, value, hint]) => (
           <div
@@ -328,12 +444,12 @@ export function SuperAdminPanel({
         ))}
       </section>
 
-      {/* Tabs Switcher: Restaurants vs Utilisateurs */}
-      <div className="flex border-b border-[var(--line)] gap-2">
+      {/* Tabs Switcher: Restaurants vs Vendeurs vs Utilisateurs */}
+      <div className="flex border-b border-[var(--line)] gap-2 overflow-x-auto">
         <button
           type="button"
           onClick={() => setActiveTab("restaurants")}
-          className={`pb-3 px-4 font-semibold text-sm transition border-b-2 flex items-center gap-2 ${
+          className={`pb-3 px-4 font-semibold text-sm transition border-b-2 flex items-center gap-2 whitespace-nowrap ${
             activeTab === "restaurants"
               ? "border-[var(--brand)] text-[var(--brand)]"
               : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]"
@@ -346,8 +462,22 @@ export function SuperAdminPanel({
         </button>
         <button
           type="button"
+          onClick={() => setActiveTab("vendeurs")}
+          className={`pb-3 px-4 font-semibold text-sm transition border-b-2 flex items-center gap-2 whitespace-nowrap ${
+            activeTab === "vendeurs"
+              ? "border-[var(--brand)] text-[var(--brand)]"
+              : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]"
+          }`}
+        >
+          <span>Gestion des Vendeurs</span>
+          <span className="rounded-full bg-[var(--line)] px-2 py-0.5 text-xs font-mono text-[var(--ink)]">
+            {vendeurs.length}
+          </span>
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveTab("users")}
-          className={`pb-3 px-4 font-semibold text-sm transition border-b-2 flex items-center gap-2 ${
+          className={`pb-3 px-4 font-semibold text-sm transition border-b-2 flex items-center gap-2 whitespace-nowrap ${
             activeTab === "users"
               ? "border-[var(--brand)] text-[var(--brand)]"
               : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]"
@@ -368,7 +498,7 @@ export function SuperAdminPanel({
             className="space-y-4 rounded-[1.5rem] border border-[var(--line)] bg-[var(--card)] p-5 shadow-[0_12px_40px_rgba(28,25,23,0.06)]"
           >
             <div>
-              <p className="muted text-xs uppercase tracking-[0.16em]">Accès gérant</p>
+              <p className="muted text-xs uppercase tracking-[0.16em]">Direct SuperAdmin</p>
               <h2 className="mt-1 text-2xl font-semibold">Créer un restaurant</h2>
               <p className="muted mt-1 text-sm" style={{ fontFamily: "var(--font-mono)" }}>
                 Le gérant n&apos;accède qu&apos;à son espace, avec un mot de passe provisoire à
@@ -455,12 +585,12 @@ export function SuperAdminPanel({
           <section className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <p className="muted text-xs uppercase tracking-[0.16em]">Ownership</p>
+                <p className="muted text-xs uppercase tracking-[0.16em]">Ownership Global</p>
                 <h2 className="text-2xl font-semibold">Tous les restaurants</h2>
               </div>
               <input
                 className="input max-w-xs"
-                placeholder="Rechercher resto ou gérant…"
+                placeholder="Rechercher resto, gérant ou vendeur…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -480,13 +610,24 @@ export function SuperAdminPanel({
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h3 className="text-lg font-semibold">{org.name}</h3>
-                      <p className="muted text-sm" style={{ fontFamily: "var(--font-mono)" }}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-lg font-semibold">{org.name}</h3>
+                        {org.vendeur ? (
+                          <span className="text-xs bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-full font-medium">
+                            Vendeur : {org.vendeur.name}
+                          </span>
+                        ) : (
+                          <span className="text-xs bg-stone-100 text-stone-700 px-2 py-0.5 rounded-full font-medium">
+                            SuperAdmin direct
+                          </span>
+                        )}
+                      </div>
+                      <p className="muted text-sm mt-1" style={{ fontFamily: "var(--font-mono)" }}>
                         /{org.slug} · {org.counts.items} plats · {org.counts.tables} tables ·{" "}
                         {org.counts.orders} cmd
                       </p>
                       <div className="mt-3 rounded-xl bg-[rgba(194,65,12,0.06)] px-3 py-2 text-sm">
-                        <div className="text-xs uppercase tracking-[0.14em] opacity-55">Gérant</div>
+                        <div className="text-xs uppercase tracking-[0.14em] opacity-55">Gérant (Exploitation)</div>
                         {org.owner ? (
                           <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                             <span className="font-semibold">{org.owner.name}</span>
@@ -504,8 +645,19 @@ export function SuperAdminPanel({
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Link href={`/dashboard/${org.id}`} className="btn btn-ghost text-xs py-2 px-3">
-                        Voir le restaurant
+                        Voir le resto
                       </Link>
+                      {org.owner ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost text-xs py-2 px-3"
+                          onClick={() =>
+                            openResetModal("org", org.id, org.name, org.owner?.email || "")
+                          }
+                        >
+                          Reset MDP Gérant
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className="btn btn-ghost text-xs py-2 px-3 text-red-600 hover:text-red-700 hover:border-red-300"
@@ -525,7 +677,157 @@ export function SuperAdminPanel({
         </div>
       ) : null}
 
-      {/* TAB 2: UTILISATEURS */}
+      {/* TAB 2: GESTION DES VENDEURS */}
+      {activeTab === "vendeurs" ? (
+        <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+          {/* Create Vendeur Form */}
+          <form
+            onSubmit={createVendeur}
+            className="space-y-4 rounded-[1.5rem] border border-[var(--line)] bg-[var(--card)] p-5 shadow-[0_12px_40px_rgba(28,25,23,0.06)]"
+          >
+            <div>
+              <p className="muted text-xs uppercase tracking-[0.16em]">Nouveau Partenaire</p>
+              <h2 className="mt-1 text-2xl font-semibold">Créer un Vendeur</h2>
+              <p className="muted mt-1 text-sm" style={{ fontFamily: "var(--font-mono)" }}>
+                Un Account Manager (Vendeur) peut créer ses propres restaurants et leur assigner des gérants.
+              </p>
+            </div>
+
+            <input className="input" name="name" placeholder="Nom complet du vendeur" required />
+            <input className="input" name="email" type="email" placeholder="Email professionnel" required />
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="label mb-0" htmlFor="vendeurPassword">
+                  Mot de passe provisoire
+                </label>
+                <button
+                  type="button"
+                  className="text-xs font-semibold underline opacity-70 hover:opacity-100"
+                  onClick={() => setVendeurPassword(suggestPassword())}
+                >
+                  Générer
+                </button>
+              </div>
+              <input
+                className="input"
+                id="vendeurPassword"
+                name="vendeurPassword"
+                type="text"
+                value={vendeurPassword}
+                onChange={(e) => setVendeurPassword(e.target.value)}
+                minLength={6}
+                required
+                autoComplete="off"
+                style={{ fontFamily: "var(--font-mono)" }}
+              />
+            </div>
+
+            {error ? <p className="text-sm text-red-700">{error}</p> : null}
+
+            {createdVendeurCred ? (
+              <div
+                className="rounded-2xl border px-4 py-3 text-sm space-y-2"
+                style={{
+                  borderColor: "color-mix(in srgb, var(--ok) 40%, var(--line))",
+                  background: "color-mix(in srgb, var(--ok) 8%, white)",
+                }}
+              >
+                <div className="font-semibold text-emerald-800">Compte Vendeur créé !</div>
+                <div className="text-xs opacity-90 space-y-1" style={{ fontFamily: "var(--font-mono)" }}>
+                  <div><strong>Nom :</strong> {createdVendeurCred.name}</div>
+                  <div><strong>Email :</strong> {createdVendeurCred.email}</div>
+                  <div><strong>MDP provisoire :</strong> {createdVendeurCred.password}</div>
+                </div>
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      copyToClipboard(
+                        `Nom: ${createdVendeurCred.name}\nEmail: ${createdVendeurCred.email}\nMot de passe: ${createdVendeurCred.password}`
+                      )
+                    }
+                    className="btn btn-ghost text-xs py-1.5 px-3"
+                  >
+                    {copied ? "✓ Identifiants copiés !" : "Copier les identifiants"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            <button className="btn w-full" disabled={loading}>
+              {loading ? "Création..." : "Créer le compte Vendeur"}
+            </button>
+          </form>
+
+          {/* Vendeurs List */}
+          <section className="space-y-4">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="muted text-xs uppercase tracking-[0.16em]">Portefeuille Partenaires</p>
+                <h2 className="text-2xl font-semibold">Tous les Vendeurs</h2>
+              </div>
+              <input
+                className="input max-w-xs"
+                placeholder="Rechercher vendeur…"
+                value={vendeurQuery}
+                onChange={(e) => setVendeurQuery(e.target.value)}
+              />
+            </div>
+
+            {filteredVendeurs.length === 0 ? (
+              <div className="rounded-[1.35rem] border border-dashed border-[var(--line)] bg-[var(--card)] p-8 text-center">
+                <p className="muted">Aucun vendeur enregistré.</p>
+              </div>
+            ) : null}
+
+            <div className="space-y-3">
+              {filteredVendeurs.map((v) => (
+                <article
+                  key={v.id}
+                  className="rounded-[1.35rem] border border-[var(--line)] bg-[var(--card)] p-4 transition hover:border-[var(--brand)]"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="text-base font-semibold">{v.name}</h3>
+                      <p className="muted text-sm mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>
+                        {v.email} · {v._count.vendeurOrganizations} restaurant(s) créé(s)
+                      </p>
+                      {v.mustChangePassword ? (
+                        <p className="text-xs text-amber-800 font-semibold mt-1">
+                          (En attente de 1re connexion / changement MDP)
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-ghost text-xs py-2 px-3"
+                        onClick={() => openResetModal("vendeur", v.id, `Vendeur ${v.name}`, v.email)}
+                      >
+                        Reset MDP
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost text-xs py-2 px-3 text-red-600 hover:text-red-700 hover:border-red-300"
+                        onClick={() => {
+                          setModalError("");
+                          setDeleteVendeurModal(v);
+                        }}
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {/* TAB 3: UTILISATEURS */}
       {activeTab === "users" ? (
         <section className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
@@ -578,31 +880,35 @@ export function SuperAdminPanel({
                               Super Admin
                             </span>
                           ) : null}
+                          {u.isVendeur ? (
+                            <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                              Vendeur
+                            </span>
+                          ) : null}
                           {u.mustChangePassword ? (
                             <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
                               MDP provisoire
                             </span>
                           ) : null}
                         </div>
-                        <p className="muted text-xs mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>
+                        <p className="muted text-xs mt-1" style={{ fontFamily: "var(--font-mono)" }}>
                           {u.email} · Inscrit le {new Date(u.createdAt).toLocaleDateString("fr-FR")}
                         </p>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {hasMemberships ? (
-                            u.memberships.map((m) => (
+                        {hasMemberships ? (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {u.memberships.map((m) => (
                               <span
                                 key={m.organization.id}
-                                className="rounded-md bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-800"
+                                className="inline-flex items-center gap-1 rounded-md bg-[var(--line)] px-2 py-0.5 text-xs"
                               >
-                                Gérant : {m.organization.name}
+                                <span className="font-semibold">{m.organization.name}</span>
+                                <span className="muted">({m.role})</span>
                               </span>
-                            ))
-                          ) : !u.isSuperAdmin ? (
-                            <span className="rounded-md bg-stone-100 px-2 py-0.5 text-xs text-stone-600 italic">
-                              Sans restaurant assigné
-                            </span>
-                          ) : null}
-                        </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="muted text-xs italic mt-1.5">Aucun restaurant assigné</p>
+                        )}
                       </div>
                     </div>
 
@@ -641,7 +947,7 @@ export function SuperAdminPanel({
         </section>
       ) : null}
 
-      {/* MODAL 1: RESET PASSWORD */}
+      {/* MODAL 1: RESET PASSWORD (Common for Org, User, Vendeur) */}
       {resetModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="card relative max-h-[90vh] w-full max-w-md space-y-4 shadow-2xl border border-[var(--line)] bg-[var(--card)] p-6 rounded-2xl overflow-y-auto">
@@ -885,6 +1191,67 @@ export function SuperAdminPanel({
                 className="btn text-xs py-2 px-4 bg-red-600 hover:bg-red-700 text-white"
               >
                 {modalLoading ? "Suppression en cours..." : "Supprimer définitivement l'utilisateur"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* MODAL 4: DELETE VENDEUR */}
+      {deleteVendeurModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="card relative max-h-[90vh] w-full max-w-md space-y-4 shadow-2xl border border-[var(--line)] bg-[var(--card)] p-6 rounded-2xl overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[var(--line)] pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-red-700">Supprimer le Vendeur</h3>
+                <p className="muted text-xs mt-0.5">
+                  {deleteVendeurModal.name} · {deleteVendeurModal.email}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteVendeurModal(null)}
+                className="flex h-7 w-7 items-center justify-center rounded-full text-base hover:bg-black/10 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {modalError ? (
+              <div className="rounded-lg bg-red-100 p-2.5 text-xs text-red-800">
+                {modalError}
+              </div>
+            ) : null}
+
+            <p className="text-sm">
+              Êtes-vous sûr de vouloir supprimer le compte du vendeur{" "}
+              <strong>« {deleteVendeurModal.name} »</strong> ({deleteVendeurModal.email}) ?
+            </p>
+
+            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs text-stone-800 space-y-1.5">
+              <div className="font-semibold">Conséquences :</div>
+              <ul className="list-disc pl-4 space-y-1 text-stone-700">
+                <li>Le vendeur ne pourra plus se connecter au portail vendeur.</li>
+                <li><strong>Tous les restaurants créés par ce vendeur seront conservés</strong> et rattachés directement à la plateforme.</li>
+              </ul>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--line)]">
+              <button
+                type="button"
+                onClick={() => setDeleteVendeurModal(null)}
+                className="btn btn-ghost text-xs py-2 px-3"
+                disabled={modalLoading}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteVendeur}
+                disabled={modalLoading}
+                className="btn text-xs py-2 px-4 bg-red-600 hover:bg-red-700 text-white"
+              >
+                {modalLoading ? "Suppression en cours..." : "Supprimer le vendeur"}
               </button>
             </div>
           </div>

@@ -2,9 +2,11 @@
 
 export const PLATFORM_ROLE_LABEL = "Admin des restaurants";
 export const PLATFORM_ROLE_SHORT = "Créateur";
+export const VENDEUR_ROLE_LABEL = "Account Manager (Vendeur)";
 
-export function roleLabel(role: string, isPlatformAdmin = false) {
+export function roleLabel(role: string, isPlatformAdmin = false, isVendeur = false) {
   if (isPlatformAdmin) return PLATFORM_ROLE_LABEL;
+  if (isVendeur) return VENDEUR_ROLE_LABEL;
   switch (role) {
     case "OWNER":
       return "Gérant";
@@ -20,9 +22,9 @@ export function roleLabel(role: string, isPlatformAdmin = false) {
 export function roleHint(role: string) {
   switch (role) {
     case "OWNER":
-      return "Accès complet à son restaurant uniquement";
+      return "Gestion des commandes et de la cuisine";
     case "ADMIN":
-      return "Menu, tables et commandes du restaurant";
+      return "Commandes et cuisine";
     case "MEMBER":
       return "Commandes cuisine uniquement";
     default:
