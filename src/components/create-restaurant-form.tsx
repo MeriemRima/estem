@@ -2,9 +2,11 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 export function CreateRestaurantForm() {
   const router = useRouter();
+  const { t, isRtl, dir } = useI18n();
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,7 +25,7 @@ export function CreateRestaurantForm() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Impossible de créer le restaurant");
+        setError(data.error || t.createResto.errorMessage);
         return;
       }
       setName("");
@@ -35,14 +37,14 @@ export function CreateRestaurantForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="card space-y-4">
-      <h2 className="text-xl font-semibold">Créer un restaurant</h2>
+    <form onSubmit={onSubmit} dir={dir} className={`card space-y-4 ${isRtl ? "rtl text-right" : ""}`}>
+      <h2 className="text-xl font-semibold">{t.createResto.title}</h2>
       <p className="muted text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-        Tu pourras ensuite gérer le menu, les tables QR et la cuisine.
+        {t.createResto.subtitle}
       </p>
       <input
         className="input"
-        placeholder="Nom du restaurant"
+        placeholder={t.createResto.namePlaceholder}
         value={name}
         onChange={(e) => setName(e.target.value)}
         required
@@ -50,8 +52,9 @@ export function CreateRestaurantForm() {
       />
       {error ? <p className="text-sm text-red-700">{error}</p> : null}
       <button className="btn w-full sm:w-auto" disabled={loading || name.trim().length < 2}>
-        {loading ? "Création..." : "Créer mon restaurant"}
+        {loading ? t.createResto.submitting : t.createResto.submitButton}
       </button>
     </form>
   );
 }
+

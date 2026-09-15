@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { Branding } from "@/lib/branding";
 import { resolveTextFont } from "@/lib/branding";
 import { qrImageUrl } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 type Table = {
   id: string;
@@ -20,6 +21,7 @@ type Props = {
 };
 
 export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props) {
+  const { t, isRtl, dir } = useI18n();
   const [useThemeBackground, setUseThemeBackground] = useState(true);
   const [selectedTableIds, setSelectedTableIds] = useState<string[]>(() =>
     tables.map((t) => t.id),
@@ -68,7 +70,7 @@ export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props)
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/75 backdrop-blur-sm">
+    <div dir={dir} className={`fixed inset-0 z-50 flex flex-col bg-black/75 backdrop-blur-sm ${isRtl ? "rtl" : ""}`}>
       {/* Top action bar - Hidden when printing */}
       <header className="no-print flex flex-wrap items-center justify-between gap-4 border-b border-white/15 bg-[#18181b] px-6 py-3.5 text-white shadow-lg">
         <div className="flex items-center gap-3">
@@ -89,10 +91,10 @@ export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props)
           </div>
           <div>
             <h2 className="text-base font-semibold leading-snug">
-              Imprimer les QR codes (Format A4)
+              {t.qrPrint.modalTitle}
             </h2>
             <p className="text-xs text-zinc-400">
-              {filteredTables.length} table{filteredTables.length > 1 ? "s" : ""} sélectionnée{filteredTables.length > 1 ? "s" : ""} · {pages.length} page{pages.length > 1 ? "s" : ""} A4 (4 par page)
+              {filteredTables.length} {t.orgDashboard.statsTables} · {pages.length} {t.customerMenu.page} A4
             </p>
           </div>
         </div>
@@ -110,7 +112,7 @@ export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props)
                   : "hover:text-white"
               }`}
             >
-              Fond restaurant
+              {t.qrPrint.restaurantBg}
             </button>
             <button
               type="button"
@@ -121,7 +123,7 @@ export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props)
                   : "hover:text-white"
               }`}
             >
-              Fond blanc (éco)
+              {t.qrPrint.whiteBg}
             </button>
           </div>
 
@@ -145,14 +147,14 @@ export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props)
                 d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
               />
             </svg>
-            Imprimer / Enregistrer en PDF
+            {t.qrPrint.printButton}
           </button>
 
           {/* Close button */}
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label={t.common.close}
             className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400 transition hover:bg-zinc-700 hover:text-white"
           >
             ✕
@@ -166,7 +168,7 @@ export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props)
         <aside className="no-print hidden w-72 flex-col border-r border-white/10 bg-[#1f1f23] p-4 text-white sm:flex">
           <div className="mb-3 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-              Tables à imprimer
+              {t.orgDashboard.tablesAndQrTitle}
             </span>
             <div className="flex gap-2 text-xs">
               <button
@@ -174,7 +176,7 @@ export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props)
                 onClick={selectAll}
                 className="text-orange-400 hover:underline"
               >
-                Toutes
+                {t.common.all}
               </button>
               <span className="text-zinc-600">|</span>
               <button
@@ -182,7 +184,7 @@ export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props)
                 onClick={deselectAll}
                 className="text-zinc-400 hover:underline"
               >
-                Aucune
+                {t.common.cancel}
               </button>
             </div>
           </div>
@@ -213,9 +215,7 @@ export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props)
 
           <div className="mt-4 border-t border-white/10 pt-3 text-[11px] leading-relaxed text-zinc-400">
             <p>
-              💡 Astuce : Dans la boîte d&apos;impression de votre navigateur, choisissez
-              <strong className="text-zinc-200"> « Enregistrer au format PDF » </strong>
-              pour sauvegarder le document A4.
+              💡 {t.qrPrint.instructions}
             </p>
           </div>
         </aside>
@@ -224,7 +224,7 @@ export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props)
         <main className="flex-1 overflow-y-auto bg-zinc-900/60 p-4 sm:p-8">
           {filteredTables.length === 0 ? (
             <div className="flex h-64 items-center justify-center text-zinc-400">
-              Aucune table sélectionnée pour l&apos;impression.
+              {t.orgDashboard.noDishesFound}
             </div>
           ) : (
             <div id="qr-print-sheets" className="flex flex-col items-center gap-10">
@@ -247,8 +247,8 @@ export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props)
                   }}
                 >
                   {/* Page header indicator for on-screen preview only */}
-                  <div className="no-print absolute -top-6 left-0 text-xs font-medium text-zinc-400">
-                    Feuille A4 · Page {pageIndex + 1} sur {pages.length}
+                  <div className="no-print absolute -top-6 left-0 rtl:left-auto rtl:right-0 text-xs font-medium text-zinc-400">
+                    {t.customerMenu.page} {pageIndex + 1} {t.customerMenu.pageOf} {pages.length}
                   </div>
 
                   {/* 2x2 Grid for 4 Cards */}
@@ -324,7 +324,7 @@ export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props)
                                 color: branding.primaryColor || "#1b4332",
                               }}
                             >
-                              Gagne du Temps
+                              {t.qrPrint.cardCta}
                             </div>
                             <p
                               className="text-xs font-medium tracking-wide"
@@ -333,7 +333,7 @@ export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props)
                                 color: "#57534e",
                               }}
                             >
-                              Scan.Menu.Choix.Commande
+                              {t.qrPrint.cardSteps}
                             </p>
                           </div>
 
@@ -355,6 +355,7 @@ export function QrPrintModal({ tables, branding, slug, origin, onClose }: Props)
                                 style={{
                                   color: branding.primaryColor || "#c5a059",
                                   fontSize: "10px",
+                                  display: "inline-block",
                                 }}
                               >
                                 ◆

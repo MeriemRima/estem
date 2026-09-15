@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 export default function ChangePasswordForm() {
   const router = useRouter();
+  const { t, isRtl, dir } = useI18n();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -17,7 +20,13 @@ export default function ChangePasswordForm() {
     const newPassword = String(form.get("newPassword") || "");
     const confirm = String(form.get("confirmPassword") || "");
     if (newPassword !== confirm) {
-      setError("Les mots de passe ne correspondent pas");
+      setError(
+        isRtl
+          ? "كلمات المرور غير متطابقة"
+          : t.common.language === "en"
+          ? "Passwords do not match"
+          : "Les mots de passe ne correspondent pas"
+      );
       setLoading(false);
       return;
     }
@@ -29,7 +38,7 @@ export default function ChangePasswordForm() {
     const data = await res.json();
     setLoading(false);
     if (!res.ok) {
-      setError(data.error || "Erreur");
+      setError(data.error || t.common.error);
       return;
     }
     router.push(data.redirectTo || "/dashboard");
@@ -37,19 +46,23 @@ export default function ChangePasswordForm() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-6 py-10">
-      <Link href="/" className="mb-8 text-2xl font-semibold">
-        Estem
-      </Link>
-      <h1 className="text-3xl font-semibold">Nouveau mot de passe</h1>
+    <main dir={dir} className={`mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-6 py-10 ${isRtl ? "rtl" : ""}`}>
+      <div className="mb-8 flex items-center justify-between">
+        <Link href="/" className="text-2xl font-semibold">
+          Estem
+        </Link>
+        <LanguageSwitcher variant="segmented" />
+      </div>
+
+      <h1 className="text-3xl font-semibold">{t.auth.changePasswordTitle}</h1>
       <p className="muted mt-2 text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-        Choisis un mot de passe personnel pour accéder à ton restaurant. Tu n&apos;as plus
-        besoin du provisoire.
+        {t.auth.changePasswordSubtitle}
       </p>
-      <form onSubmit={onSubmit} className="card mt-8 space-y-4">
+
+      <form onSubmit={onSubmit} className="card mt-6 space-y-4">
         <div>
           <label className="label" htmlFor="newPassword">
-            Nouveau mot de passe
+            {t.auth.newPassword}
           </label>
           <input
             className="input"
@@ -63,7 +76,7 @@ export default function ChangePasswordForm() {
         </div>
         <div>
           <label className="label" htmlFor="confirmPassword">
-            Confirmer
+            {t.auth.confirmPassword}
           </label>
           <input
             className="input"
@@ -76,7 +89,7 @@ export default function ChangePasswordForm() {
         </div>
         {error ? <p className="text-sm text-red-700">{error}</p> : null}
         <button className="btn w-full" disabled={loading}>
-          {loading ? "..." : "Enregistrer et continuer"}
+          {loading ? t.common.loading : t.auth.changePasswordButton}
         </button>
       </form>
     </main>

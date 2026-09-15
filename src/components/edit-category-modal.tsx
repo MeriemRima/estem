@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 type EditCategoryModalProps = {
   orgId: string;
@@ -15,6 +16,7 @@ export function EditCategoryModal({
   onClose,
   onSuccess,
 }: EditCategoryModalProps) {
+  const { t, isRtl, dir } = useI18n();
   const [name, setName] = useState(category.name);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -23,7 +25,7 @@ export function EditCategoryModal({
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("Le nom de la catégorie ne peut pas être vide.");
+      setError(t.common.required);
       return;
     }
     if (trimmed === category.name) {
@@ -43,25 +45,25 @@ export function EditCategoryModal({
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Impossible de modifier la catégorie");
+        throw new Error(data.error || t.common.error);
       }
 
       await onSuccess();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur de modification");
+      setError(err instanceof Error ? err.message : t.common.error);
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in">
+    <div dir={dir} className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in ${isRtl ? "rtl" : ""}`}>
       <div className="card relative w-full max-w-md space-y-4 shadow-2xl border border-[var(--line)] bg-[var(--card)] p-6 rounded-2xl">
         <div className="flex items-center justify-between border-b border-[var(--line)] pb-3">
           <div>
-            <h2 className="text-xl font-bold">Modifier la catégorie</h2>
-            <p className="muted text-xs">Nom de la catégorie affichée sur le menu</p>
+            <h2 className="text-xl font-bold">{t.categories.modalTitleEdit}</h2>
+            <p className="muted text-xs">{t.common.details}</p>
           </div>
           <button
             type="button"
@@ -80,12 +82,12 @@ export function EditCategoryModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="label font-medium">Nom de la catégorie *</label>
+            <label className="label font-medium">{t.categories.name} *</label>
             <input
               className="input"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex. Plats principaux"
+              placeholder={t.categories.name}
               required
             />
           </div>
@@ -97,10 +99,10 @@ export function EditCategoryModal({
               onClick={onClose}
               disabled={saving}
             >
-              Annuler
+              {t.common.cancel}
             </button>
-            <button type="submit" className="btn" disabled={saving || !name.trim()}>
-              {saving ? "Enregistrement..." : "Enregistrer"}
+            <button type="submit" className="btn" disabled={saving}>
+              {saving ? t.common.saving : t.common.save}
             </button>
           </div>
         </form>

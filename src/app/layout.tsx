@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { CSSProperties } from "react";
+import { cookies } from "next/headers";
 import {
   Barlow,
   DM_Sans,
@@ -11,6 +12,9 @@ import {
   Source_Sans_3,
   Space_Grotesk,
 } from "next/font/google";
+import { I18nProvider } from "@/lib/i18n/i18n-context";
+import { DEFAULT_LOCALE, getDirection } from "@/lib/i18n";
+import { Locale } from "@/lib/i18n/types";
 import "./globals.css";
 
 const fraunces = Fraunces({ variable: "--font-fraunces", subsets: ["latin"] });
@@ -55,11 +59,23 @@ const rootFontStyle = {
   ["--font-mono" as string]: "var(--font-source), system-ui, sans-serif",
 } as CSSProperties;
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  const rawLocale = cookieStore.get("NEXT_LOCALE")?.value as Locale | undefined;
+  const initialLocale: Locale =
+    rawLocale === "ar" || rawLocale === "en" || rawLocale === "fr" ? rawLocale : DEFAULT_LOCALE;
+  const initialDir = getDirection(initialLocale);
+
   return (
-    <html lang="fr" className={`${fontVars} h-full`} style={rootFontStyle} suppressHydrationWarning>
+    <html
+      lang={initialLocale}
+      dir={initialDir}
+      className={`${fontVars} h-full`}
+      style={rootFontStyle}
+      suppressHydrationWarning
+    >
       <body className="min-h-full antialiased" suppressHydrationWarning>
-        {children}
+        <I18nProvider initialLocale={initialLocale}>{children}</I18nProvider>
       </body>
     </html>
   );

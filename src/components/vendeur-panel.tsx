@@ -3,6 +3,9 @@
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { LogoutButton } from "@/components/logout-button";
 
 type Owner = {
   id: string;
@@ -39,13 +42,18 @@ function suggestPassword() {
 }
 
 export function VendeurPanel({
+
   initialOrgs,
   initialStats,
+  userEmail,
 }: {
   initialOrgs: OrgRow[];
   initialStats: Stats;
+  userEmail?: string;
 }) {
+
   const router = useRouter();
+  const { t, isRtl, dir } = useI18n();
   const [orgs, setOrgs] = useState(initialOrgs);
   const [stats, setStats] = useState(initialStats);
   const [error, setError] = useState("");
@@ -123,7 +131,7 @@ export function VendeurPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Erreur");
+        setError(data.error || t.common.error);
         return;
       }
       setCreatedCred({
@@ -161,7 +169,7 @@ export function VendeurPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Erreur");
+        setError(data.error || t.common.error);
         return;
       }
       setResetCred({
@@ -178,14 +186,14 @@ export function VendeurPanel({
 
   async function resetOwnerPassword(org: OrgRow) {
     if (!org.owner) return;
-    if (!window.confirm(`Nouveau mot de passe provisoire pour ${org.owner.email} ?`)) return;
+    if (!window.confirm(`${t.superAdmin.resetManagerPassword} : ${org.owner.email} ?`)) return;
     setError("");
     const res = await fetch(`/api/vendeur/restaurants/${org.id}/owner`, {
       method: "PUT",
     });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error || "Réinitialisation impossible");
+      setError(data.error || t.common.error);
       return;
     }
     setResetCred({
@@ -197,13 +205,35 @@ export function VendeurPanel({
   }
 
   return (
-    <div className="space-y-8">
+    <div dir={dir} className={`space-y-8 ${isRtl ? "rtl text-right" : ""}`}>
+      <header className="overflow-hidden rounded-[1.75rem] border border-[var(--line)] bg-[var(--card)] px-6 py-7 shadow-[0_16px_48px_rgba(28,25,23,0.07)]">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="muted text-sm uppercase tracking-[0.22em]">{t.pages.vendeurBadge}</p>
+            <h1 className="mt-1 text-4xl font-semibold tracking-tight">{t.roles.vendeur}</h1>
+            <p className="muted mt-2 max-w-xl text-sm" style={{ fontFamily: "var(--font-mono)" }}>
+              {t.pages.vendeurSubtitle}
+            </p>
+            {userEmail ? (
+              <p className="muted mt-3 text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+                {t.pages.connectedAs} · {userEmail}
+              </p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <LanguageSwitcher variant="dropdown" />
+            <LogoutButton />
+          </div>
+        </div>
+      </header>
+
       {/* Stats Cards */}
+
       <section className="grid gap-3 sm:grid-cols-3">
         {[
-          ["Mes Restaurants", stats.restaurants, "Créés et gérés par toi"],
-          ["Plats au Menu", stats.dishes, "Total plats sur tes cartes"],
-          ["Commandes live", stats.activeOrders, "Dans tes établissements"],
+          [t.vendeur.statRestaurants, stats.restaurants, t.vendeur.statRestaurantsHint],
+          [t.orgDashboard.statsPlats, stats.dishes, t.orgDashboard.allDishes],
+          [t.kitchen.liveOrders, stats.activeOrders, t.kitchen.autoRefresh],
         ].map(([label, value, hint]) => (
           <div
             key={label as string}
@@ -229,33 +259,33 @@ export function VendeurPanel({
           className="space-y-4 rounded-[1.5rem] border border-[var(--line)] bg-[var(--card)] p-5 shadow-[0_12px_40px_rgba(28,25,23,0.06)]"
         >
           <div>
-            <p className="muted text-xs uppercase tracking-[0.16em]">Nouveau Restaurant</p>
-            <h2 className="mt-1 text-2xl font-semibold">Créer un restaurant</h2>
+            <p className="muted text-xs uppercase tracking-[0.16em]">{t.vendeur.createRestaurantTitle}</p>
+            <h2 className="mt-1 text-2xl font-semibold">{t.superAdmin.createRestaurantTitle}</h2>
             <p className="muted mt-1 text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-              Tu pourras ensuite personnaliser son menu, sa charte graphique, et lui assigner un gérant.
+              {t.vendeur.createRestaurantSubtitle}
             </p>
           </div>
 
-          <input className="input" name="restaurantName" placeholder="Nom du restaurant" required />
+          <input className="input" name="restaurantName" placeholder={t.superAdmin.restaurantName} required />
 
           <div className="pt-2">
             <p className="text-xs uppercase tracking-[0.14em] font-semibold mb-2 opacity-70">
-              Gérant (Optionnel à la création)
+              {t.superAdmin.managerLabel}
             </p>
             <div className="space-y-3">
-              <input className="input" name="ownerName" placeholder="Nom du gérant (optionnel)" />
-              <input className="input" name="ownerEmail" type="email" placeholder="Email du gérant (optionnel)" />
+              <input className="input" name="ownerName" placeholder={t.superAdmin.managerName} />
+              <input className="input" name="ownerEmail" type="email" placeholder={t.superAdmin.managerEmail} />
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <label className="label mb-0" htmlFor="ownerPassword">
-                    Mot de passe provisoire gérant
+                    {t.superAdmin.provisionalPassword}
                   </label>
                   <button
                     type="button"
                     className="text-xs font-semibold underline opacity-70"
                     onClick={() => setProvisionalPassword(suggestPassword())}
                   >
-                    Générer
+                    {t.superAdmin.generatePassword}
                   </button>
                 </div>
                 <input
@@ -283,26 +313,26 @@ export function VendeurPanel({
                 background: "color-mix(in srgb, var(--ok) 8%, white)",
               }}
             >
-              <div className="font-semibold">Restaurant créé avec succès !</div>
+              <div className="font-semibold">{t.superAdmin.managerAccountCreated}</div>
               <p className="opacity-80" style={{ fontFamily: "var(--font-mono)" }}>
                 {createdCred.restaurant}
                 {createdCred.email ? (
                   <>
                     <br />
-                    Gérant : {createdCred.email}
+                    {t.superAdmin.managerLabel} : {createdCred.email}
                     <br />
-                    MDP provisoire : {createdCred.password}
+                    {t.superAdmin.provisionalPassword} : {createdCred.password}
                   </>
                 ) : null}
               </p>
               <Link href={`/dashboard/${createdCred.orgId}`} className="btn mt-2 inline-block">
-                Personnaliser le menu & le restaurant
+                {t.settings.title}
               </Link>
             </div>
           ) : null}
 
           <button className="btn w-full" disabled={loading}>
-            {loading ? "Création..." : "Créer le restaurant"}
+            {loading ? t.common.loading : t.superAdmin.createRestaurantButton}
           </button>
         </form>
 
@@ -310,12 +340,12 @@ export function VendeurPanel({
         <section className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="muted text-xs uppercase tracking-[0.16em]">Portefeuille</p>
-              <h2 className="text-2xl font-semibold">Tes Restaurants</h2>
+              <p className="muted text-xs uppercase tracking-[0.16em]">{t.vendeur.myPortfolio}</p>
+              <h2 className="text-2xl font-semibold">{t.vendeur.statRestaurants}</h2>
             </div>
             <input
               className="input max-w-xs"
-              placeholder="Rechercher un resto…"
+              placeholder={t.vendeur.searchPortfolioPlaceholder}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -323,7 +353,7 @@ export function VendeurPanel({
 
           {filtered.length === 0 ? (
             <div className="rounded-[1.35rem] border border-dashed border-[var(--line)] bg-[var(--card)] p-8 text-center">
-              <p className="muted">Aucun restaurant pour le moment.</p>
+              <p className="muted">{t.vendeur.noRestaurantsInPortfolio}</p>
             </div>
           ) : null}
 
@@ -335,13 +365,13 @@ export function VendeurPanel({
                 background: "color-mix(in srgb, var(--ok) 8%, white)",
               }}
             >
-              <div className="font-semibold">Compte gérant mis à jour</div>
+              <div className="font-semibold">{t.superAdmin.resetSuccessTitle}</div>
               <p className="mt-1 opacity-80" style={{ fontFamily: "var(--font-mono)" }}>
                 {resetCred.restaurant}
                 <br />
                 {resetCred.email}
                 <br />
-                Nouveau MDP : {resetCred.password}
+                {t.superAdmin.provisionalPassword} : {resetCred.password}
               </p>
             </div>
           ) : null}
@@ -356,20 +386,20 @@ export function VendeurPanel({
                   <div className="min-w-0">
                     <h3 className="text-lg font-semibold">{org.name}</h3>
                     <p className="muted text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-                      /{org.slug} · {org.counts.items} plats · {org.counts.tables} tables ·{" "}
-                      {org.counts.orders} cmd
+                      /{org.slug} · {org.counts.items} {t.customerMenu.dishes} · {org.counts.tables} {t.customerMenu.tables} ·{" "}
+                      {org.counts.orders} {t.customerMenu.orders}
                     </p>
 
                     <div className="mt-3 rounded-xl bg-[rgba(194,65,12,0.06)] px-3 py-2 text-sm">
-                      <div className="text-xs uppercase tracking-[0.14em] opacity-55">Gérant (Exploitation)</div>
+                      <div className="text-xs uppercase tracking-[0.14em] opacity-55">{t.superAdmin.managerLabel}</div>
                       {org.owner ? (
                         <div className="mt-0.5 flex items-center justify-between gap-2 flex-wrap">
                           <div>
                             <span className="font-semibold">{org.owner.name}</span>
                             <span className="muted"> · {org.owner.email}</span>
                             {org.owner.mustChangePassword ? (
-                              <span className="ml-2 text-xs font-semibold text-amber-800">
-                                (MDP provisoire)
+                              <span className="mx-2 text-xs font-semibold text-amber-800">
+                                ({t.superAdmin.provisionalPasswordBadge})
                               </span>
                             ) : null}
                           </div>
@@ -378,12 +408,12 @@ export function VendeurPanel({
                             className="text-xs underline font-semibold text-amber-900"
                             onClick={() => resetOwnerPassword(org)}
                           >
-                            Reset MDP
+                            {t.superAdmin.resetManagerPassword}
                           </button>
                         </div>
                       ) : (
                         <div className="mt-1 flex items-center justify-between gap-2">
-                          <span className="muted text-xs">Aucun gérant assigné</span>
+                          <span className="muted text-xs">{t.superAdmin.noManagerAssigned}</span>
                           <button
                             type="button"
                             className="text-xs font-semibold underline text-[var(--brand)]"
@@ -392,7 +422,7 @@ export function VendeurPanel({
                               setAssignOwnerPassword(suggestPassword());
                             }}
                           >
-                            + Assigner un gérant
+                            + {t.superAdmin.managerLabel}
                           </button>
                         </div>
                       )}
@@ -401,10 +431,10 @@ export function VendeurPanel({
 
                   <div className="flex flex-wrap gap-2">
                     <Link href={`/dashboard/${org.id}`} className="btn">
-                      Personnaliser & Menu
+                      {t.settings.title}
                     </Link>
                     <Link href={`/o/${org.slug}`} target="_blank" className="btn btn-ghost">
-                      Menu Client ↗
+                      {t.orgDashboard.openMenu} ↗
                     </Link>
                   </div>
                 </div>
@@ -419,16 +449,16 @@ export function VendeurPanel({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-[1.5rem] border border-[var(--line)] bg-[var(--card)] p-6 shadow-2xl space-y-4">
             <div>
-              <h3 className="text-xl font-semibold">Assigner un gérant</h3>
+              <h3 className="text-xl font-semibold">{t.superAdmin.managerLabel}</h3>
               <p className="muted text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-                Pour le restaurant : {assigningOrg.name}
+                {assigningOrg.name}
               </p>
             </div>
             <form onSubmit={handleAssignOwner} className="space-y-3">
-              <input className="input" name="ownerName" placeholder="Nom du gérant" required />
-              <input className="input" name="ownerEmail" type="email" placeholder="Email du gérant" required />
+              <input className="input" name="ownerName" placeholder={t.superAdmin.managerName} required />
+              <input className="input" name="ownerEmail" type="email" placeholder={t.superAdmin.managerEmail} required />
               <div className="space-y-1">
-                <label className="text-xs font-semibold opacity-70">Mot de passe provisoire</label>
+                <label className="text-xs font-semibold opacity-70">{t.superAdmin.provisionalPassword}</label>
                 <input
                   className="input"
                   name="ownerPassword"
@@ -445,10 +475,10 @@ export function VendeurPanel({
                   className="btn btn-ghost"
                   onClick={() => setAssigningOrg(null)}
                 >
-                  Annuler
+                  {t.common.cancel}
                 </button>
                 <button className="btn" disabled={loading}>
-                  {loading ? "Assignation..." : "Enregistrer"}
+                  {loading ? t.common.loading : t.common.save}
                 </button>
               </div>
             </form>

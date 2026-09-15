@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 type Item = {
   id: string;
@@ -32,6 +33,7 @@ export function EditDishModal({
   onClose,
   onSuccess,
 }: EditDishModalProps) {
+  const { t, isRtl, dir } = useI18n();
   const [name, setName] = useState(item.name);
   const [description, setDescription] = useState(item.description ?? "");
   const [price, setPrice] = useState(String(item.priceCents / 100));
@@ -61,7 +63,7 @@ export function EditDishModal({
       body: fd,
     });
     if (!res.ok) {
-      throw new Error("Échec upload de l'image");
+      throw new Error(t.common.error);
     }
     const data = await res.json();
     return data.url;
@@ -73,7 +75,7 @@ export function EditDishModal({
 
     const numPrice = Number(price);
     if (!name.trim() || !Number.isFinite(numPrice) || numPrice <= 0 || !categoryId) {
-      setError("Veuillez remplir correctement tous les champs requis.");
+      setError(t.common.required);
       return;
     }
 
@@ -100,25 +102,25 @@ export function EditDishModal({
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Impossible de modifier le plat");
+        throw new Error(data.error || t.common.error);
       }
 
       await onSuccess();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur de modification");
+      setError(err instanceof Error ? err.message : t.common.error);
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm animate-fade-in">
+    <div dir={dir} className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm animate-fade-in ${isRtl ? "rtl" : ""}`}>
       <div className="card relative max-h-[90vh] w-full max-w-md space-y-3 shadow-2xl border border-[var(--line)] bg-[var(--card)] p-5 rounded-2xl">
         <div className="flex items-center justify-between border-b border-[var(--line)] pb-2">
           <div>
-            <h2 className="text-lg font-bold">Modifier le plat</h2>
-            <p className="muted text-xs">Informations du plat</p>
+            <h2 className="text-lg font-bold">{t.dishes.modalTitleEdit}</h2>
+            <p className="muted text-xs">{t.common.details}</p>
           </div>
           <button
             type="button"
@@ -137,19 +139,19 @@ export function EditDishModal({
 
         <form onSubmit={handleSubmit} className="space-y-3 text-sm">
           <div>
-            <label className="label text-xs font-medium">Nom du plat *</label>
+            <label className="label text-xs font-medium">{t.dishes.name} *</label>
             <input
               className="input text-sm py-2"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex. Tajine de Poulet"
+              placeholder={t.dishes.name}
               required
             />
           </div>
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="label text-xs font-medium">Catégorie *</label>
+              <label className="label text-xs font-medium">{t.dishes.category} *</label>
               <select
                 className="input text-sm py-2"
                 value={categoryId}
@@ -165,7 +167,7 @@ export function EditDishModal({
             </div>
 
             <div>
-              <label className="label text-xs font-medium">Prix (DH) *</label>
+              <label className="label text-xs font-medium">{t.dishes.price} *</label>
               <input
                 className="input text-sm py-2"
                 type="number"
@@ -173,31 +175,31 @@ export function EditDishModal({
                 min="0.01"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                placeholder="45.00"
+                placeholder="450"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="label text-xs font-medium">Description</label>
+            <label className="label text-xs font-medium">{t.dishes.description}</label>
             <textarea
               className="input text-sm min-h-[55px] py-1.5 resize-y"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Ingrédients, épices, garniture..."
+              placeholder={t.dishes.descriptionPlaceholder}
             />
           </div>
 
           <div>
-            <label className="label text-xs font-medium">Photo du plat</label>
+            <label className="label text-xs font-medium">{t.dishes.image}</label>
             <div className="flex items-center gap-3">
               {previewUrl ? (
                 <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-[var(--line)] bg-stone-100">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={previewUrl}
-                    alt="Aperçu"
+                    alt={name}
                     className="h-full w-full object-cover"
                   />
                   <button
@@ -206,7 +208,7 @@ export function EditDishModal({
                       setImageFile(null);
                       setPreviewUrl("");
                     }}
-                    title="Supprimer la photo"
+                    title={t.common.delete}
                     className="absolute inset-0 flex items-center justify-center bg-black/60 text-xs font-bold text-white opacity-0 hover:opacity-100 transition-opacity"
                   >
                     ✕
@@ -229,10 +231,10 @@ export function EditDishModal({
               onClick={onClose}
               disabled={saving}
             >
-              Annuler
+              {t.common.cancel}
             </button>
             <button type="submit" className="btn text-xs px-4 py-1.5" disabled={saving}>
-              {saving ? "Enregistrement..." : "Enregistrer"}
+              {saving ? t.common.saving : t.common.save}
             </button>
           </div>
         </form>

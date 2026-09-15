@@ -1,33 +1,37 @@
-/** Libellés métier (UI) — les rôles Prisma restent OWNER / ADMIN / MEMBER. */
+import type { Translations } from "@/lib/i18n/types";
+import { fr } from "@/lib/i18n/dictionaries/fr";
 
-export const PLATFORM_ROLE_LABEL = "Admin des restaurants";
-export const PLATFORM_ROLE_SHORT = "Créateur";
-export const VENDEUR_ROLE_LABEL = "Account Manager (Vendeur)";
+export const PLATFORM_ROLE_LABEL = fr.roles.platformAdmin;
+export const PLATFORM_ROLE_SHORT = fr.roles.platformShort;
+export const VENDEUR_ROLE_LABEL = fr.roles.vendeur;
 
-export function roleLabel(role: string, isPlatformAdmin = false, isVendeur = false) {
-  if (isPlatformAdmin) return PLATFORM_ROLE_LABEL;
-  if (isVendeur) return VENDEUR_ROLE_LABEL;
+export function roleLabel(role: string, isPlatformAdmin = false, isVendeur = false, t?: Translations) {
+  const roles = t ? t.roles : fr.roles;
+  if (isPlatformAdmin) return roles.platformAdmin;
+  if (isVendeur) return roles.vendeur;
   switch (role) {
     case "OWNER":
-      return "Gérant";
+      return roles.owner;
     case "ADMIN":
-      return "Responsable";
+      return roles.admin;
     case "MEMBER":
-      return "Équipe";
+      return roles.member;
     default:
       return role;
   }
 }
 
-export function roleHint(role: string) {
+export function roleHint(role: string, t?: Translations) {
+  const roles = t ? t.roles : fr.roles;
   switch (role) {
     case "OWNER":
-      return "Gestion des commandes et de la cuisine";
+      return roles.ownerHint;
     case "ADMIN":
-      return "Commandes et cuisine";
+      return roles.adminHint;
     case "MEMBER":
-      return "Commandes cuisine uniquement";
+      return roles.memberHint;
     default:
       return "";
   }
 }
+

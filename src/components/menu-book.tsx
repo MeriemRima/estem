@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { formatMoney } from "@/lib/utils";
 import type { Branding } from "@/lib/branding";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 type MenuItem = {
   id: string;
@@ -67,6 +68,7 @@ export function MenuBook({
   branding: Branding;
   onAddItem: (item: MenuItem) => void;
 }) {
+  const { t, isRtl, dir } = useI18n();
   const pages = useMemo(() => buildPages(categories), [categories]);
   const [page, setPage] = useState(0);
   const [turning, setTurning] = useState<"next" | "prev" | null>(null);
@@ -83,11 +85,13 @@ export function MenuBook({
   }
 
   return (
-    <div className="mx-auto flex min-h-[70vh] w-full max-w-lg flex-col justify-center">
+    <div dir={dir} className={`mx-auto flex min-h-[70vh] w-full max-w-lg flex-col justify-center ${isRtl ? "rtl" : ""}`}>
       <div className="relative w-full" style={{ perspective: "1600px" }}>
-        {/* Reliure très fine à gauche — pas de gros cadre noir */}
+        {/* Reliure */}
         <div
-          className="pointer-events-none absolute bottom-2 left-0 top-2 z-10 w-1.5 rounded-full"
+          className={`pointer-events-none absolute bottom-2 top-2 z-10 w-1.5 rounded-full ${
+            isRtl ? "right-0" : "left-0"
+          }`}
           style={{
             background: `linear-gradient(180deg, ${branding.primaryColor}99, ${branding.secondaryColor}88)`,
             opacity: 0.55,
@@ -95,18 +99,24 @@ export function MenuBook({
         />
 
         <div
-          className="relative ml-2 flex min-h-[min(72vh,640px)] origin-left flex-col overflow-hidden transition-transform duration-300 ease-out"
+          className={`relative flex min-h-[min(72vh,640px)] flex-col overflow-hidden transition-transform duration-300 ease-out ${
+            isRtl ? "mr-2 origin-right" : "ml-2 origin-left"
+          }`}
           style={{
             background: "linear-gradient(165deg, #fffefb 0%, #faf3e8 50%, #f3e9da 100%)",
             color: branding.secondaryColor,
-            borderRadius: "2px 14px 14px 2px",
+            borderRadius: isRtl ? "14px 2px 2px 14px" : "2px 14px 14px 2px",
             border: `1px solid ${branding.primaryColor}28`,
             boxShadow: `4px 8px 24px ${branding.primaryColor}18, inset 6px 0 12px rgba(80,50,20,0.04)`,
             transform:
               turning === "next"
-                ? "rotateY(-10deg)"
+                ? isRtl
+                  ? "rotateY(10deg)"
+                  : "rotateY(-10deg)"
                 : turning === "prev"
-                  ? "rotateY(8deg)"
+                  ? isRtl
+                    ? "rotateY(-8deg)"
+                    : "rotateY(8deg)"
                   : "rotateY(0deg)",
             transformStyle: "preserve-3d",
           }}
@@ -119,9 +129,11 @@ export function MenuBook({
             }}
           />
           <div
-            className="pointer-events-none absolute inset-y-0 left-0 w-6"
+            className={`pointer-events-none absolute inset-y-0 w-6 ${isRtl ? "right-0" : "left-0"}`}
             style={{
-              background: "linear-gradient(90deg, rgba(60,35,15,0.06), transparent)",
+              background: isRtl
+                ? "linear-gradient(270deg, rgba(60,35,15,0.06), transparent)"
+                : "linear-gradient(90deg, rgba(60,35,15,0.06), transparent)",
             }}
           />
 
@@ -156,7 +168,7 @@ export function MenuBook({
                 />
                 <p className="text-sm opacity-55">{tableName}</p>
                 <p className="mt-10 text-xs uppercase tracking-widest opacity-35">
-                  Tourne la page →
+                  {isRtl ? "← اقلب الصفحة" : "Tourne la page →"}
                 </p>
               </div>
             ) : (
@@ -176,14 +188,14 @@ export function MenuBook({
                   </h2>
                   {current.totalInCat > 1 ? (
                     <p className="text-xs opacity-45">
-                      Page {current.pageIndex}/{current.totalInCat}
+                      {t.customerMenu.page} {current.pageIndex}/{current.totalInCat}
                     </p>
                   ) : null}
                 </div>
 
                 <div className="flex-1 space-y-2.5">
                   {current.items.length === 0 ? (
-                    <p className="text-sm opacity-50">Aucun plat dans cette catégorie.</p>
+                    <p className="text-sm opacity-50">{t.customerMenu.emptyCategory}</p>
                   ) : (
                     current.items.map((item) => (
                       <button
@@ -215,7 +227,7 @@ export function MenuBook({
                             <p className="mt-0.5 text-xs opacity-55">{item.description}</p>
                           ) : null}
                           <p className="mt-1 text-[10px] uppercase tracking-wide opacity-35">
-                            Toucher pour ajouter
+                            {t.customerMenu.addToCart}
                           </p>
                         </div>
                       </button>
@@ -243,7 +255,7 @@ export function MenuBook({
           disabled={page === 0 || !!turning}
           onClick={() => go(-1)}
         >
-          ← Page préc.
+          {isRtl ? `${t.customerMenu.prevPage} →` : `← ${t.customerMenu.prevPage}`}
         </button>
         <button
           type="button"
@@ -252,7 +264,7 @@ export function MenuBook({
           disabled={page >= pages.length - 1 || !!turning}
           onClick={() => go(1)}
         >
-          Page suiv. →
+          {isRtl ? `← ${t.customerMenu.nextPage}` : `${t.customerMenu.nextPage} →`}
         </button>
       </div>
     </div>
